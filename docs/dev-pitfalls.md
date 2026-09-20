@@ -29,7 +29,7 @@
 17. **scene tile id 不假设为 0**：用 `get_scene_tile_id(idx)` 动态取。
 18. **PackedScene.pack 前子节点必须 `owner = root`**：漏设会打包出空壳场景。
 19. **ResourceSaver 内嵌内存资源**：把内存中的 PackedScene 注册进 TileSet/场景，会被内嵌成 sub_resource 副本（改单件不生效、体积膨胀、列表显示内部名）；先 `save()` 落盘再 `load()` 回来注册。
-20. **运行时生成的 PNG 无 import 数据**：`load()` / `ResourceLoader.exists()` 失败（资源隐形）；加载统一走 `Image.load_from_file`（绝对路径）+ 内存缓存，存在性用 `FileAccess.file_exists`。
+20. **运行时生成的 PNG 无 import 数据**：`load()` / `ResourceLoader.exists()` 失败（资源隐形）；加载统一走 `Image.load_from_file`（**静态方法，须传绝对路径，返回 Image、失败返回 null**，不是实例方法返回错误码）+ 内存缓存，存在性用 `FileAccess.file_exists`。
 21. **形态A配方（探针全过，直接抄）**：`SortRoot(y_sort_enabled)` → `GroundLayer(z=-10, atlas tiles)` + `PropsLayer(y_sort_enabled, scenes collection)`；件场景根原点=底边中心、Sprite `offset=-h/2`、`StaticBody2D` 碰撞=底边脚印（宽×min(件高,格高)）；嵌套 y-sort 与层外角色互遮挡经像素级验证正确。16px 地面与 48px 件需两个 TileMapLayer（tile_size 是 TileSet 全局属性）。
 
 ## 四、导出与 CI
