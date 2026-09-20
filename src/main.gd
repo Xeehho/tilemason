@@ -3,6 +3,7 @@ extends Node2D
 ## 装配编辑相机与网格覆盖层；后续在此接入地图文档、素材库与工具路由
 
 const DEFAULT_GRID := 16 ## 默认正式网格（px）
+const MAP_PATH := "user://map.json" ## P0 固定存档槽（文件对话框随 P1 图层 UI 做）
 
 ## 素材分类 → 文档图层路由（P0 简化：wall 暂入基础地形层，图层系统扩展后细化）
 const CATEGORY_TO_LAYER := {
@@ -42,6 +43,10 @@ func _ready() -> void:
 
 	var asset_count := _library.scan(AssetLibrary.default_roots())
 	_build_asset_panel()
+
+	# 启动自动载入上次存档（验收 8：保存后重新打开仍可编辑）
+	if FileAccess.file_exists(MAP_PATH):
+		_load_map(false)
 
 	_preview = Sprite2D.new()
 	_preview.modulate.a = 0.5 # 半透明预览（design.md §2.1）
@@ -109,8 +114,41 @@ func _unhandled_input(event: InputEvent) -> void:
 			_do_undo()
 		elif key.ctrl_pressed and key.keycode == KEY_Y:
 			_do_redo()
+		elif key.ctrl_pressed and key.keycode == KEY_S:
+			_save_map()
+		elif key.ctrl_pressed and key.keycode == KEY_L:
+			_load_map(true)
 		elif key.keycode == KEY_E:
 			_toggle_eraser()
+
+## 保存当前地图（P0 固定槽位；design.md §10 另存为/版本随后续 UI 扩展）
+func _save_map() -> void:
+	if _document.save_to_file(MAP_PATH):
+		var tiles := 0
+		for layer in _document.get_layers():
+			tiles += _document.get_tile_coords(str((layer as Dictionary)["id"])).size()
+		print("[TileMason] 已保存：%s（%d 方块，%d 物件）" % [MAP_PATH, tiles, _document.get_objects().size()])
+
+## 载入地图：替换文档并重建视图；manual=false 用于启动静默载入
+func _load_map(manual: bool) -> void:
+	var doc := MapDocument.load_from_file(MAP_PATH)
+	if doc == null:
+		if manual:
+			print("[TileMason] 载入失败：%s" % MAP_PATH)
+		return
+	_document = doc
+	_commands.clear()
+	_painting = false
+	_erasing = false
+	_eraser_mode = false
+	_view.queue_free()
+	_view = MapView.new()
+	_view.setup(_document, _library)
+	add_child(_view)
+	var tiles := 0
+	for layer in _document.get_layers():
+		tiles += _document.get_tile_coords(str((layer as Dictionary)["id"])).size()
+	print("[TileMason] 已载入：%s（%d 方块，%d 物件）" % [MAP_PATH, tiles, _document.get_objects().size()])
 
 ## Ctrl+Z / Ctrl+Y（design.md §6.3）
 func _do_undo() -> void:
@@ -329,6 +367,7 @@ func _capture_screenshot() -> void:
 	await get_tree().create_timer(1.2).timeout
 	var img := get_viewport().get_texture().get_image()
 	img.save_png("user://screenshot_editor.png")
+	_save_map() # 顺带落盘：下轮截图/冒烟验证「保存→重开→仍可编辑」链路
 	print("[TileMason] 截图：%s" % ProjectSettings.globalize_path("user://screenshot_editor.png"))
 	get_tree().quit(0)
 
