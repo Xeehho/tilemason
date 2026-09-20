@@ -22,23 +22,29 @@ var _assets := {} # asset_id("包id/相对路径") -> 素材 Dictionary
 var _images := {} # 绝对路径 -> Image
 var _textures := {} # asset_id -> ImageTexture（缩略图用）
 
-## 默认扫描根：开发态 res 包目录 + 用户目录；导出 exe 相对路径随导出里程碑扩展
+## 默认扫描根：内置 demo 包（随仓库分发）+ res 包目录 + 用户目录；导出 exe 相对路径随导出里程碑扩展
 static func default_roots() -> Array:
-	return ["res://assets/packs", "user://packs"]
+	return ["res://assets/demo", "res://assets/packs", "user://packs"]
 
 ## 扫描所有根目录下的素材包，返回素材总数；目录缺失只告警不算失败
+## 根目录自身带 pack.json 时整个根就是一个包（如内置 assets/demo），否则按「根/<包>/pack.json」逐包扫描
 func scan(roots: Array) -> int:
 	for root in roots:
-		var dir := DirAccess.open(str(root))
+		var root_path := str(root)
+		var dir := DirAccess.open(root_path)
 		if dir == null:
 			continue # 根目录不存在（如全新环境无包），正常情况
-		dir.list_dir_begin()
-		var entry := dir.get_next()
-		while not entry.is_empty():
-			if dir.current_is_dir() and not str(entry).begins_with("."):
-				_load_pack(str(root).path_join(str(entry)), str(entry))
-			entry = dir.get_next()
-		dir.list_dir_end()
+		var root_is_pack := FileAccess.file_exists(root_path.path_join("pack.json"))
+		if root_is_pack:
+			_load_pack(root_path, root_path.get_file())
+		else:
+			dir.list_dir_begin()
+			var entry := dir.get_next()
+			while not entry.is_empty():
+				if dir.current_is_dir() and not str(entry).begins_with("."):
+					_load_pack(root_path.path_join(str(entry)), str(entry))
+				entry = dir.get_next()
+			dir.list_dir_end()
 	return _assets.size()
 
 ## 素材包数 / 素材数
