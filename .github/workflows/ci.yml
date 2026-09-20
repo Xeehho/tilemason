@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      GODOT_VERSION: "4.6.2"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Godot headless
+        run: |
+          wget -q "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q "Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          chmod +x "Godot_v${GODOT_VERSION}-stable_linux.x86_64"
+
+      - name: 导入项目
+        run: "./Godot_v${GODOT_VERSION}-stable_linux.x86_64 --headless --path . --import"
+
+      - name: 解析检查全部脚本
+        run: |
+          status=0
+          while IFS= read -r script; do
+            echo "checking $script"
+            "./Godot_v${GODOT_VERSION}-stable_linux.x86_64" --headless --path . --check-only --script "$script" || status=1
+          done < <(find src -name '*.gd')
+          exit $status
+
+      - name: 冒烟启动
+        run: "./Godot_v${GODOT_VERSION}-stable_linux.x86_64 --headless --path . --quit-after 5"

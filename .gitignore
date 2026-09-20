@@ -1,0 +1,19 @@
+# Godot 4 生成目录
+.godot/
+
+# 导出产物
+/builds/
+export_credentials.cfg
+
+# 系统
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 编辑器
+.vscode/
+.idea/
+
+# 素材包不入库（版权各自保留），目录内说明文件除外
+/assets/packs/*
+!/assets/packs/README.md
