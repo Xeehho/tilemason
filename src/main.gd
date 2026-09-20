@@ -147,7 +147,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion and _marqueeing:
 		_update_marquee_preview(mouse_cell())
 	elif event is InputEventMouseMotion and _moving:
-		_view.drag_object_sprites(_selection.object_ids(), get_global_mouse_position() - _move_start_px)
+		var delta_px := get_global_mouse_position() - _move_start_px
+		_view.drag_object_sprites(_selection.object_ids(), delta_px)
+		_view.drag_cells_sprites(_selection.cells_by_layer(), delta_px)
 	elif event is InputEventMouseMotion and _line_armed:
 		_rebuild_line_preview(mouse_cell())
 	elif event is InputEventKey and event.pressed and not event.echo:
@@ -342,11 +344,12 @@ func _exit_select_mode() -> void:
 	_rect_preview.clear_rect()
 	_view.set_objects_tinted(_selection.object_ids(), false)
 	_view.resync_objects(_selection.object_ids()) # 丢弃未提交的拖动位移
+	_view.resync_cells(_selection.cells_by_layer())
 	_selection.clear()
 	print("[TileMason] 选择模式关闭")
 	refresh_status()
 
-## 按下：点中已选物件→拖动移动；否则→框选
+## 按下：点中已选物件/已选格→拖动移动；否则→框选
 func _begin_select_action() -> void:
 	if _mouse_over_panel():
 		return
@@ -355,14 +358,23 @@ func _begin_select_action() -> void:
 	var hit_id := -1
 	for id in hits:
 		hit_id = int(id) # 取最后一个（近似最上层）
-	if hit_id >= 0 and _selection.has_object(hit_id):
+	var can_move := (hit_id >= 0 and _selection.has_object(hit_id)) or _cell_selected_at(cell)
+	if can_move and not _selection.is_empty():
 		_moving = true
 		_move_start_px = get_global_mouse_position()
 		_view.begin_object_drag(_selection.object_ids())
+		_view.begin_cells_drag(_selection.cells_by_layer())
 	else:
 		_marqueeing = true
 		_marquee_start = cell
 		_update_marquee_preview(cell)
+
+## 该格是否在选区（任意层）
+func _cell_selected_at(cell: Vector2i) -> bool:
+	for layer_id in _selection.cells_by_layer().keys():
+		if _selection.has_cell(str(layer_id), cell):
+			return true
+	return false
 
 func _update_marquee_preview(cell: Vector2i) -> void:
 	var r := Rect2i(Vector2i(mini(_marquee_start.x, cell.x), mini(_marquee_start.y, cell.y)),
@@ -387,6 +399,7 @@ func _end_select_action() -> void:
 		var delta_cell := Vector2i(((get_global_mouse_position() - _move_start_px) / float(DEFAULT_GRID)).round())
 		if delta_cell == Vector2i.ZERO:
 			_view.resync_objects(_selection.object_ids())
+			_view.resync_cells(_selection.cells_by_layer())
 			return
 		_commit_move(delta_cell)
 
@@ -410,25 +423,55 @@ func _clear_selection_tints() -> void:
 	for layer_id in _selection.cells_by_layer().keys():
 		_view.set_cells_tinted(str(layer_id), _selection.cells_by_layer()[str(layer_id)], false)
 
-## 拖动提交：整体位移一格增量，单命令可撤销（design.md §7 多选移动）
+## 拖动提交：物件+格块整体位移一格增量，单命令可撤销（design.md §7 多选移动）
 func _commit_move(delta_cell: Vector2i) -> void:
-	var entries := []
+	var obj_entries := []
 	for id in _selection.object_ids():
 		var obj := _document.get_object(int(id))
 		if obj.is_empty():
 			continue
 		var from: Vector2i = obj["cell"]
-		entries.append({"id": int(id), "from": from, "to": from + delta_cell})
-	if entries.is_empty():
+		obj_entries.append({"id": int(id), "from": from, "to": from + delta_cell})
+	# 格块快照源（asset_id 随方块走）
+	var cells_by_layer := _selection.cells_by_layer()
+	var block := []
+	for layer_id in cells_by_layer.keys():
+		for c in (cells_by_layer[str(layer_id)] as Array):
+			var entry := _document.get_tile(str(layer_id), c as Vector2i)
+			if not entry.is_empty():
+				block.append({"layer": str(layer_id), "cell": c as Vector2i, "asset_id": str(entry["asset_id"])})
+	if obj_entries.is_empty() and block.is_empty():
 		_view.resync_objects(_selection.object_ids())
+		_view.resync_cells(cells_by_layer)
 		return
 	var do_move := func() -> void:
-		for e in entries:
+		for e in obj_entries:
 			_document.update_object(int((e as Dictionary)["id"]), {"cell": (e as Dictionary)["to"]}, true)
+		for b in block: # 块内重叠安全：先清全部源
+			var src: Dictionary = b
+			_document.erase_tile(str(src["layer"]), src["cell"] as Vector2i, true)
+		for b in block: # 再写全部目标
+			var dst: Dictionary = b
+			_document.set_tile(str(dst["layer"]), (dst["cell"] as Vector2i) + delta_cell, str(dst["asset_id"]), true)
 	var undo_move := func() -> void:
-		for e in entries:
+		for b in block: # 反向：清目标
+			var cl: Dictionary = b
+			_document.erase_tile(str(cl["layer"]), (cl["cell"] as Vector2i) + delta_cell, true)
+		for b in block: # 还原源
+			var rs: Dictionary = b
+			_document.set_tile(str(rs["layer"]), rs["cell"] as Vector2i, str(rs["asset_id"]), true)
+		for e in obj_entries:
 			_document.update_object(int((e as Dictionary)["id"]), {"cell": (e as Dictionary)["from"]}, true)
-	_commands.push("移动 %d 件 %s" % [entries.size(), str(delta_cell)], do_move, undo_move)
+	_commands.push("移动 %d 件 %d 格" % [obj_entries.size(), block.size()], do_move, undo_move)
+	# 选区跟随到新位置
+	var new_cells := {}
+	for b in block:
+		var sel_c: Dictionary = b
+		var layer_key := str(sel_c["layer"])
+		if not new_cells.has(layer_key):
+			new_cells[layer_key] = []
+		(new_cells[layer_key] as Array).append((sel_c["cell"] as Vector2i) + delta_cell)
+	_apply_selection(_selection.object_ids(), new_cells)
 
 ## 复制选中内容（物件快照 + 方块快照）
 func _copy_selected() -> void:

@@ -172,6 +172,28 @@ func resync_objects(object_ids: Array) -> void:
 	for id in object_ids:
 		_sync_object(int(id))
 
+## 格选区拖动预览：记录基准（与物件拖动同款机制）
+func begin_cells_drag(cells_by_layer: Dictionary) -> void:
+	for layer_id in cells_by_layer.keys():
+		for c in (cells_by_layer[layer_id] as Array):
+			var s := _tile_sprites.get("%s|%d,%d" % [str(layer_id), (c as Vector2i).x, (c as Vector2i).y]) as Sprite2D
+			if s != null:
+				s.set_meta("_base_pos", s.position)
+
+## 格选区拖动预览：按像素位移偏移（不动文档）
+func drag_cells_sprites(cells_by_layer: Dictionary, delta_px: Vector2) -> void:
+	for layer_id in cells_by_layer.keys():
+		for c in (cells_by_layer[layer_id] as Array):
+			var s := _tile_sprites.get("%s|%d,%d" % [str(layer_id), (c as Vector2i).x, (c as Vector2i).y]) as Sprite2D
+			if s != null and s.has_meta("_base_pos"):
+				s.position = (s.get_meta("_base_pos") as Vector2) + delta_px
+
+## 格选区回同步：按文档重摆（取消拖动/提交后）
+func resync_cells(cells_by_layer: Dictionary) -> void:
+	for layer_id in cells_by_layer.keys():
+		for c in (cells_by_layer[layer_id] as Array):
+			_on_tile_changed(str(layer_id), c as Vector2i)
+
 ## ---- 内部：tile 渲染 ----
 
 func _tile_key(layer_id: String, coords: Vector2i) -> String:
