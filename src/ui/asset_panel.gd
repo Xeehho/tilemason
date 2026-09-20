@@ -64,6 +64,9 @@ func _build_ui() -> void:
 	_category_list.item_selected.connect(_on_category_selected)
 	hbox.add_child(_category_list)
 
+	var sep := VSeparator.new() # 分类与缩略图区的视觉分隔
+	hbox.add_child(sep)
+
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
