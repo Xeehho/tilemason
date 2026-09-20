@@ -3,7 +3,8 @@ extends Node2D
 ## 装配编辑相机与网格覆盖层；后续在此接入地图文档、素材库与工具路由
 
 const DEFAULT_GRID := 16 ## 默认正式网格（px）
-const MAP_PATH := "user://map.json" ## P0 固定存档槽（文件对话框随 P1 图层 UI 做）
+const MAP_PATH := "user://map.json" ## 默认存档槽（启动自动恢复用）
+var _current_map_path := MAP_PATH ## 当前编辑中的地图文件（打开/另存为切换，Ctrl+S 存这里）
 
 ## 素材分类 → 文档图层路由（P0 简化：wall 暂入基础地形层，图层系统扩展后细化）
 const CATEGORY_TO_LAYER := {
@@ -154,7 +155,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif key.ctrl_pressed and key.keycode == KEY_Y:
 			_do_redo()
 		elif key.ctrl_pressed and key.keycode == KEY_S:
-			_save_map()
+			if key.shift_pressed:
+				_save_as_dialog() # Ctrl+Shift+S 另存为
+			else:
+				_save_map()
+		elif key.ctrl_pressed and key.keycode == KEY_O:
+			_open_map_dialog()
 		elif key.ctrl_pressed and key.keycode == KEY_L:
 			_load_map(true)
 		elif key.keycode == KEY_E:
@@ -186,21 +192,24 @@ func _run_map_check() -> void:
 	for issue in issues:
 		print("[TileMason] [检查] %s" % str((issue as Dictionary)["message"]))
 
-## 保存当前地图（P0 固定槽位；design.md §10 另存为/版本随后续 UI 扩展）
+## 保存当前地图到当前文件（design.md §10；另存为走 _save_as_dialog）
 func _save_map() -> void:
-	if _document.save_to_file(MAP_PATH):
+	if _document.save_to_file(_current_map_path):
 		var tiles := 0
 		for layer in _document.get_layers():
 			tiles += _document.get_tile_coords(str((layer as Dictionary)["id"])).size()
-		print("[TileMason] 已保存：%s（%d 方块，%d 物件）" % [MAP_PATH, tiles, _document.get_objects().size()])
+		print("[TileMason] 已保存：%s（%d 方块，%d 物件）" % [_current_map_path, tiles, _document.get_objects().size()])
 
 ## 载入地图：替换文档并重建视图；manual=false 用于启动静默载入
 func _load_map(manual: bool) -> void:
-	var doc := MapDocument.load_from_file(MAP_PATH)
+	if not _load_map_from(MAP_PATH) and manual:
+		print("[TileMason] 载入失败：%s" % MAP_PATH)
+
+## 从指定文件载入（打开对话框/启动恢复共用）；成功返回 true
+func _load_map_from(path: String) -> bool:
+	var doc := MapDocument.load_from_file(path)
 	if doc == null:
-		if manual:
-			print("[TileMason] 载入失败：%s" % MAP_PATH)
-		return
+		return false
 	_document = doc
 	_commands.clear()
 	_painting = false
@@ -215,7 +224,37 @@ func _load_map(manual: bool) -> void:
 	var tiles := 0
 	for layer in _document.get_layers():
 		tiles += _document.get_tile_coords(str((layer as Dictionary)["id"])).size()
-	print("[TileMason] 已载入：%s（%d 方块，%d 物件）" % [MAP_PATH, tiles, _document.get_objects().size()])
+	print("[TileMason] 已载入：%s（%d 方块，%d 物件）" % [path, tiles, _document.get_objects().size()])
+	return true
+
+## ---- 文件对话框（design.md §10：另存为不同地图/打开）----
+
+func _open_map_dialog() -> void:
+	var dialog := _make_dialog(FileDialog.FILE_MODE_OPEN_FILE)
+	dialog.file_selected.connect(func(path: String) -> void:
+		if _load_map_from(path):
+			_current_map_path = path
+			print("[TileMason] 当前地图切换为：%s" % path))
+
+func _save_as_dialog() -> void:
+	var dialog := _make_dialog(FileDialog.FILE_MODE_SAVE_FILE)
+	dialog.file_selected.connect(func(path: String) -> void:
+		_current_map_path = path
+		_save_map())
+
+func _make_dialog(mode: int) -> FileDialog:
+	var dialog := FileDialog.new()
+	if "use_native_dialog" in dialog:
+		dialog.use_native_dialog = true # 优先系统原生对话框
+	dialog.access = FileDialog.ACCESS_FILESYSTEM
+	dialog.file_mode = mode
+	dialog.filters = ["*.json ; TileMason 地图"]
+	dialog.current_dir = ProjectSettings.globalize_path("user://")
+	dialog.canceled.connect(func() -> void: dialog.queue_free())
+	dialog.file_selected.connect(func(_p: String) -> void: dialog.queue_free())
+	add_child(dialog)
+	dialog.popup_centered(Vector2i(900, 550))
+	return dialog
 
 ## Ctrl+Z / Ctrl+Y（design.md §6.3）
 func _do_undo() -> void:
