@@ -42,6 +42,7 @@ var _line_mode := false ## L 键直线工具（design.md §2.2）
 var _line_armed := false ## 已定起点，等待终点
 var _line_start := Vector2i.ZERO
 var _line_sprites: Array = [] ## 直线预览 Sprite 池
+var _status: StatusBar ## 底部状态栏（当前工具/素材常驻可见）
 
 func _ready() -> void:
 	var camera := EditorCamera.new()
@@ -63,6 +64,8 @@ func _ready() -> void:
 		_load_map(false)
 
 	_build_layer_panel()
+	_build_status_bar()
+	refresh_status()
 
 	_preview = Sprite2D.new()
 	_preview.modulate.a = 0.5 # 半透明预览（design.md §2.1）
@@ -208,6 +211,7 @@ func _load_map(manual: bool) -> void:
 	_view.setup(_document, _library)
 	add_child(_view)
 	_build_layer_panel() # 重绑新文档
+	refresh_status()
 	var tiles := 0
 	for layer in _document.get_layers():
 		tiles += _document.get_tile_coords(str((layer as Dictionary)["id"])).size()
@@ -285,6 +289,7 @@ func _toggle_select_mode() -> void:
 		return
 	_select_mode = true
 	print("[TileMason] 选择模式：拖框选物件，拖动选中物件移动，Esc/S 退出")
+	refresh_status()
 
 func _exit_select_mode() -> void:
 	if not _select_mode:
@@ -297,6 +302,7 @@ func _exit_select_mode() -> void:
 	_view.resync_objects(_selection.object_ids()) # 丢弃未提交的拖动位移
 	_selection.clear()
 	print("[TileMason] 选择模式关闭")
+	refresh_status()
 
 ## 按下：点中已选物件→拖动移动；否则→框选
 func _begin_select_action() -> void:
@@ -455,6 +461,7 @@ func _toggle_line_mode() -> void:
 	_line_mode = true
 	_line_armed = false
 	print("[TileMason] 直线工具：点起点，再点终点画线（L/Esc 退出）")
+	refresh_status()
 
 func _exit_line_mode() -> void:
 	if not _line_mode:
@@ -463,6 +470,7 @@ func _exit_line_mode() -> void:
 	_line_armed = false
 	_clear_line_preview()
 	print("[TileMason] 直线工具关闭")
+	refresh_status()
 
 func _line_click(cell: Vector2i) -> void:
 	if _mouse_over_panel():
@@ -471,6 +479,7 @@ func _line_click(cell: Vector2i) -> void:
 		_line_armed = true
 		_line_start = cell
 		_rebuild_line_preview(cell)
+		refresh_status()
 		return
 	# 第二击：落线
 	var asset := _library.get_asset(_selected_asset_id)
@@ -485,6 +494,7 @@ func _line_click(cell: Vector2i) -> void:
 			entries.append({"cell": c, "old": prev})
 	_line_armed = false
 	_clear_line_preview()
+	refresh_status()
 	if entries.is_empty():
 		return
 	var do_line := func() -> void:
@@ -552,6 +562,7 @@ func _mirror_selected() -> void:
 func _toggle_eraser() -> void:
 	_eraser_mode = not _eraser_mode
 	print("[TileMason] 橡皮擦模式：%s" % ("开（左键/右键/拖动清除当前层，E 关闭）" if _eraser_mode else "关"))
+	refresh_status()
 
 ## 当前层：选中素材分类路由的图层；未选中默认地面层
 func _eraser_layer() -> String:
@@ -763,6 +774,48 @@ func _on_asset_selected(asset_id: String) -> void:
 	var asset := _library.get_asset(asset_id)
 	if not asset.is_empty():
 		print("[TileMason] 选中素材：%s（%s · %s）" % [asset["name"], asset_id, asset["category"]])
+	refresh_status()
+
+## 底部状态栏：全宽停靠，常驻显示当前操作状态
+func _build_status_bar() -> void:
+	var layer_ui := CanvasLayer.new()
+	layer_ui.layer = 10
+	add_child(layer_ui)
+	_status = StatusBar.new()
+	_status.setup()
+	layer_ui.add_child(_status)
+	_status.anchor_left = 0.0
+	_status.anchor_right = 1.0
+	_status.anchor_top = 1.0
+	_status.anchor_bottom = 1.0
+	_status.offset_left = 0
+	_status.offset_right = 0
+	_status.offset_top = -26
+	_status.offset_bottom = 0
+
+## 汇总当前状态刷到状态栏（任何工具/素材变化后调用）
+func refresh_status() -> void:
+	if _status == null:
+		return
+	var tool := "画笔（左键放置/拖刷，Shift 单块）"
+	if _eraser_mode:
+		tool = "橡皮擦（清「%s」层，左键/拖动/E 退出）" % _eraser_layer_name()
+	elif _select_mode:
+		tool = "选择（拖框选 · 拖动移动 · Ctrl+C/V 复制粘贴 · H 镜像 · Del 删除）"
+	elif _line_mode:
+		tool = "直线（%s，L/Esc 退出）" % ("已定起点，点终点" if _line_armed else "点起点")
+	var asset_text := "未选（右侧面板点素材）"
+	if not _selected_asset_id.is_empty():
+		var asset := _library.get_asset(_selected_asset_id)
+		if not asset.is_empty():
+			asset_text = "%s" % asset["name"]
+	_status.set_line("工具：%s ｜ 素材：%s ｜ S 选择 · E 橡皮 · L 直线 · Ctrl+框 矩形 · Ctrl+Z/Y 撤销重做 · Ctrl+S 保存 · F9 检查" % [tool, asset_text])
+
+func _eraser_layer_name() -> String:
+	var layer := _document.get_layer(_eraser_layer())
+	if layer.is_empty():
+		return _eraser_layer()
+	return str(layer["name"])
 
 ## 视觉取证用：文档为空时程序化摆样（一条道路+草地+建筑+树），延时截屏存盘后退出
 ## 须窗口模式运行，headless 无渲染
