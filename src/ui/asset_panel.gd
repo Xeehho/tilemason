@@ -20,7 +20,23 @@ var _category_list: ItemList
 var _grid: GridContainer
 var _empty_hint: Label
 var _selected: TextureButton
+var _buttons := {} # asset_id -> TextureButton（当前分类网格内的按钮）
 var _thumbs := {} # asset_id -> ImageTexture（整数倍缩放后的缩略图）
+
+## 外部指定选中（吸管等入口）：切换到对应分类并高亮（会发 asset_selected 信号）
+func select_asset(asset_id: String) -> void:
+	if not _buttons.has(asset_id):
+		var asset := _library.get_asset(asset_id)
+		if asset.is_empty():
+			return
+		for i in _category_list.item_count:
+			if str(_category_list.get_item_metadata(i)) == str(asset["category"]):
+				_category_list.select(i)
+				_on_category_selected(i)
+				break
+	var btn: TextureButton = _buttons.get(asset_id)
+	if btn != null:
+		_on_thumb_pressed(btn, asset_id)
 
 func setup(library: AssetLibrary) -> void:
 	_library = library
@@ -91,11 +107,14 @@ func _on_category_selected(index: int) -> void:
 		_selected = null
 	for child in _grid.get_children():
 		child.queue_free()
+	_buttons.clear()
 	var category := str(_category_list.get_item_metadata(index))
 	var assets: Array = _library.get_assets_by_category(category)
 	_empty_hint.visible = assets.is_empty()
 	for asset in assets:
-		_grid.add_child(_make_thumb_button(asset as Dictionary))
+		var btn := _make_thumb_button(asset as Dictionary)
+		_buttons[str((asset as Dictionary)["id"])] = btn
+		_grid.add_child(btn)
 
 func _make_thumb_button(asset: Dictionary) -> TextureButton:
 	var asset_id := str(asset["id"])

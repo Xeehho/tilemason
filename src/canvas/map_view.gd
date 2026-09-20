@@ -50,6 +50,30 @@ func get_tile_sprite(layer_id: String, coords: Vector2i) -> Sprite2D:
 func get_object_sprite(object_id: int) -> Sprite2D:
 	return _object_sprites.get(object_id)
 
+## 吸管：取指定格最上层内容的素材 id（物件层自顶向下按脚印命中，其次 tile 层自顶向下）
+## 空格返回空串
+func pick_asset_id_at(cell: Vector2i) -> String:
+	for i in range(document.layer_count() - 1, -1, -1):
+		var layer: Dictionary = document.get_layers()[i]
+		var layer_id := str(layer["id"])
+		if layer["type"] != "object":
+			continue
+		for obj in document.get_objects_on_layer(layer_id):
+			var o := obj as Dictionary
+			var tl: Vector2i = o["cell"]
+			var asset := library.get_asset(str(o["asset_id"]))
+			var cells: Vector2i = Vector2i.ONE if asset.is_empty() else asset["cells"]
+			if cell.x >= tl.x and cell.y >= tl.y and cell.x < tl.x + cells.x and cell.y < tl.y + cells.y:
+				return str(o["asset_id"])
+	for i in range(document.layer_count() - 1, -1, -1):
+		var layer: Dictionary = document.get_layers()[i]
+		if str(layer["type"]) != "tile":
+			continue
+		var entry := document.get_tile(str(layer["id"]), cell)
+		if not entry.is_empty():
+			return str(entry["asset_id"])
+	return ""
+
 ## ---- 内部：tile 渲染 ----
 
 func _tile_key(layer_id: String, coords: Vector2i) -> String:

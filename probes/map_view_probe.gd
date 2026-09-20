@@ -21,7 +21,9 @@ func _init() -> void:
 	_test_tiles(doc, view)
 	_test_objects(doc, view)
 	_test_undo(doc, view)
-	_test_rebuild(doc, lib)
+	_test_pick(doc, view)
+	_test_stroke(doc, view)
+	_test_rebuild(doc, lib, view)
 	_cleanup()
 	print("[TileMason] 探针结束：通过 %d / 失败 %d" % [_pass, _fail])
 	quit(0 if _fail == 0 else 1)
@@ -82,13 +84,57 @@ func _test_undo(doc: MapDocument, view: MapView) -> void:
 	stack.redo()
 	_check(view.get_tile_sprite("ground", cell) != null, "重做后视图恢复方块")
 
-func _test_rebuild(doc: MapDocument, lib: AssetLibrary) -> void:
+func _test_pick(doc: MapDocument, view: MapView) -> void:
+	# 物件脚印 (0..2, 0..2) 盖在方块 (1,1) 上：物件层优先
+	var obj_id := doc.add_object({"asset_id": "probe_mv/props/prop.png", "layer": "deco", "cell": Vector2i(0, 0)})
+	doc.set_tile("ground", Vector2i(1, 1), "probe_mv/tiles/tile.png")
+	_check(view.pick_asset_id_at(Vector2i(0, 0)) == "probe_mv/props/prop.png", "吸管命中物件脚印角格")
+	_check(view.pick_asset_id_at(Vector2i(1, 1)) == "probe_mv/props/prop.png", "物件层优先于 tile 层")
+	doc.remove_object(obj_id)
+	_check(view.pick_asset_id_at(Vector2i(1, 1)) == "probe_mv/tiles/tile.png", "物件删除后命中底层方块")
+	_check(view.pick_asset_id_at(Vector2i(9, 9)).is_empty(), "空格返回空串")
+
+func _test_stroke(doc: MapDocument, view: MapView) -> void:
+	# 模拟拖刷 3 格 + 抬手合成一个命令：undo 一次整段回滚，redo 整段重放
+	var stack := CommandStack.new()
+	var layer := "ground"
+	var asset := "probe_mv/tiles/tile.png"
+	var cells := [Vector2i(10, 0), Vector2i(11, 0), Vector2i(12, 0)]
+	var entries: Array = []
+	for c in cells:
+		entries.append({"cell": c, "old": doc.set_tile(layer, c, asset)})
+	var do_stroke := func() -> void:
+		for e in entries:
+			doc.set_tile(layer, (e as Dictionary)["cell"], asset, true)
+	var undo_stroke := func() -> void:
+		for i in range(entries.size() - 1, -1, -1):
+			var e: Dictionary = entries[i]
+			var prev: Dictionary = e["old"]
+			if prev.is_empty():
+				doc.erase_tile(layer, e["cell"], true)
+			else:
+				doc.set_tile(layer, e["cell"], str(prev["asset_id"]), true)
+	stack.push("笔画 3 格", do_stroke, undo_stroke)
+	var all_visible := view.get_tile_sprite(layer, cells[0]) != null \
+		and view.get_tile_sprite(layer, cells[1]) != null \
+		and view.get_tile_sprite(layer, cells[2]) != null
+	_check(all_visible, "笔画 3 格全部渲染")
+	stack.undo()
+	var all_gone := view.get_tile_sprite(layer, cells[0]) == null \
+		and view.get_tile_sprite(layer, cells[1]) == null \
+		and view.get_tile_sprite(layer, cells[2]) == null
+	_check(all_gone, "撤销一次回滚整段笔画")
+	stack.redo()
+	_check(view.get_tile_sprite(layer, cells[2]) != null, "重做整段恢复")
+
+func _test_rebuild(doc: MapDocument, lib: AssetLibrary, view: MapView) -> void:
+	var tiles_before := view.tile_sprite_count()
 	doc.set_tile("terrain", Vector2i(1, 1), "probe_mv/tiles/tile.png")
 	doc.set_tile("ground", Vector2i(2, 2), "probe_mv/tiles/tile.png")
 	var obj_id := doc.add_object({"asset_id": "probe_mv/props/prop.png", "layer": "deco", "cell": Vector2i(0, 0)})
 	var view2 := MapView.new()
 	view2.setup(doc, lib)
-	_check(view2.tile_sprite_count() == 3 and view2.get_object_sprite(obj_id) != null, "同文档重建视图全量渲染（3 方块+1 物件）")
+	_check(view2.tile_sprite_count() == tiles_before + 2 and view2.get_object_sprite(obj_id) != null, "同文档重建视图全量渲染（%d 方块+新物件）" % view2.tile_sprite_count())
 
 func _setup_fixtures() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(FIXTURE_ROOT + "/tiles"))
