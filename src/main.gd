@@ -28,6 +28,9 @@ var _eraser_mode := false ## E 键切换：左键/拖动清除当前层（design
 var _erasing := false ## 擦除笔画进行中
 var _erase_cells: Array = [] ## 擦除格记录 [{cell, old}]
 var _erase_layer := ""
+var _recting := false ## 矩形填充拖框进行中（Ctrl+左键，design.md §2.2/§6.3）
+var _rect_start := Vector2i.ZERO
+var _rect_preview: RectPreview
 
 func _ready() -> void:
 	var camera := EditorCamera.new()
@@ -56,6 +59,10 @@ func _ready() -> void:
 	_preview.z_index = 50 # 画布内容之上、网格覆盖层(100)之下
 	_preview.visible = false
 	add_child(_preview)
+
+	_rect_preview = RectPreview.new()
+	_rect_preview.z_index = 60
+	add_child(_rect_preview)
 
 	print("[TileMason] 编辑器骨架启动：grid=%dpx，文档 %d 层就绪，素材 %d 项；滚轮缩放，中键/空格+左键平移，面板选素材左键放置/拖刷，右键吸管，E 橡皮擦，Ctrl+Z/Y 撤销重做" % [DEFAULT_GRID, _document.layer_count(), asset_count])
 
@@ -94,11 +101,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			if mb.pressed:
-				if _eraser_mode:
+				if mb.ctrl_pressed and not _eraser_mode:
+					_begin_rect() # Ctrl+左键：矩形填充拖框
+				elif _eraser_mode:
 					_begin_erase()
 				else:
 					_begin_paint()
 			else:
+				_end_rect()
 				_end_paint()
 				_end_erase()
 		elif mb.pressed and mb.button_index == MOUSE_BUTTON_RIGHT:
@@ -110,6 +120,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_paint_to(mouse_cell())
 	elif event is InputEventMouseMotion and _erasing:
 		_erase_to(mouse_cell())
+	elif event is InputEventMouseMotion and _recting:
+		_update_rect_preview(mouse_cell())
 	elif event is InputEventKey and event.pressed and not event.echo:
 		var key := event as InputEventKey
 		if key.ctrl_pressed and key.keycode == KEY_Z:
@@ -178,6 +190,55 @@ func _do_redo() -> void:
 		print("[TileMason] 没有可重做的操作")
 
 ## ---- 橡皮擦（design.md §5：单格/笔刷，只清当前层）----
+
+## ---- 矩形填充（design.md §2.2：Ctrl+左键拖框，整块单命令）----
+
+func _begin_rect() -> void:
+	if _selected_asset_id.is_empty() or _mouse_over_panel():
+		return
+	var asset := _library.get_asset(_selected_asset_id)
+	if asset.is_empty() or not AssetLibrary.TILE_CATEGORIES.has(str(asset["category"])):
+		return # 矩形填充仅用于规则方块
+	_rect_start = mouse_cell()
+	_recting = true
+	_update_rect_preview(_rect_start)
+
+func _update_rect_preview(cell: Vector2i) -> void:
+	var r := Rect2i(Vector2i(mini(_rect_start.x, cell.x), mini(_rect_start.y, cell.y)),
+		Vector2i(absi(cell.x - _rect_start.x) + 1, absi(cell.y - _rect_start.y) + 1))
+	_rect_preview.set_rect_px(Rect2(Vector2(r.position) * DEFAULT_GRID, Vector2(r.size) * DEFAULT_GRID))
+
+func _end_rect() -> void:
+	if not _recting:
+		return
+	_recting = false
+	_rect_preview.clear_rect()
+	if _mouse_over_panel():
+		return
+	var asset := _library.get_asset(_selected_asset_id)
+	if asset.is_empty():
+		return
+	var cell := mouse_cell()
+	var rect := Rect2i(Vector2i(mini(_rect_start.x, cell.x), mini(_rect_start.y, cell.y)),
+		Vector2i(absi(cell.x - _rect_start.x) + 1, absi(cell.y - _rect_start.y) + 1))
+	var layer_id: String = CATEGORY_TO_LAYER.get(str(asset["category"]), "ground")
+	# Shift 同按=「遇已有内容停止」模式（design.md §2.2），默认覆盖
+	var skip := Input.is_key_pressed(KEY_SHIFT)
+	var entries: Array = _document.fill_rect(layer_id, rect, str(asset["id"]), skip)
+	if entries.is_empty():
+		return
+	var do_fill := func() -> void:
+		for e in entries:
+			_document.set_tile(layer_id, (e as Dictionary)["cell"], str(asset["id"]), true)
+	var undo_fill := func() -> void:
+		for i in range(entries.size() - 1, -1, -1):
+			var e: Dictionary = entries[i]
+			var prev: Dictionary = e["old"]
+			if prev.is_empty():
+				_document.erase_tile(layer_id, e["cell"], true)
+			else:
+				_document.set_tile(layer_id, e["cell"], str(prev["asset_id"]), true)
+	_commands.push("矩形填充 %d 格%s" % [entries.size(), "（跳过已有）" if skip else ""], do_fill, undo_fill)
 
 func _toggle_eraser() -> void:
 	_eraser_mode = not _eraser_mode

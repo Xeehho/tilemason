@@ -13,6 +13,7 @@ func _init() -> void:
 	_test_tile_ops()
 	_test_layer_lock()
 	_test_objects()
+	_test_fill_rect()
 	_test_command_stack()
 	_test_undo_with_document()
 	_test_serialization()
@@ -74,6 +75,36 @@ func _test_objects() -> void:
 	var removed: Variant = doc.remove_object(id2)
 	_check(removed is Dictionary and (removed as Dictionary)["asset_id"] == "tree_a", "删除返回被删物件")
 	_check(doc.remove_object(id2) == null, "重复删除返回 null")
+
+func _test_fill_rect() -> void:
+	var doc := MapDocument.new()
+	var stack := CommandStack.new()
+	doc.set_tile("ground", Vector2i(0, 0), "old_floor") # 预置旧内容验证覆盖与恢复
+	var entries := doc.fill_rect("ground", Rect2i(Vector2i(0, 0), Vector2i(2, 3)), "floor_a")
+	_check(entries.size() == 6, "矩形填充 2×3 全部应用（覆盖模式含旧格）")
+	_check(doc.get_tile("ground", Vector2i(1, 2))["asset_id"] == "floor_a", "区域内格已写入")
+	var do_fill := func() -> void:
+		for e in entries:
+			doc.set_tile("ground", (e as Dictionary)["cell"], "floor_a", true)
+	var undo_fill := func() -> void:
+		for i in range(entries.size() - 1, -1, -1):
+			var e: Dictionary = entries[i]
+			var prev: Dictionary = e["old"]
+			if prev.is_empty():
+				doc.erase_tile("ground", e["cell"], true)
+			else:
+				doc.set_tile("ground", e["cell"], str(prev["asset_id"]), true)
+	stack.push("矩形填充", do_fill, undo_fill)
+	stack.undo()
+	_check(doc.get_tile("ground", Vector2i(1, 2)).is_empty() and doc.get_tile("ground", Vector2i(0, 0))["asset_id"] == "old_floor", "整段撤销恢复原状（含旧格）")
+	stack.redo()
+	_check(doc.get_tile("ground", Vector2i(1, 2))["asset_id"] == "floor_a", "重做整段恢复")
+	doc.set_tile("ground", Vector2i(5, 5), "keep_me")
+	var entries2 := doc.fill_rect("ground", Rect2i(Vector2i(5, 5), Vector2i(2, 2)), "floor_b", true)
+	_check(entries2.size() == 3 and doc.get_tile("ground", Vector2i(5, 5))["asset_id"] == "keep_me", "跳过模式保留已有内容")
+	doc.set_layer_property("ground", "locked", true)
+	_check(doc.fill_rect("ground", Rect2i(Vector2i(9, 9), Vector2i.ONE), "x").is_empty(), "锁定层拒绝矩形填充")
+	doc.set_layer_property("ground", "locked", false)
 
 func _test_command_stack() -> void:
 	var stack := CommandStack.new()

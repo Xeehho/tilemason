@@ -128,6 +128,24 @@ func erase_tile(layer_id: String, coords: Vector2i, force := false) -> Variant:
 	tile_changed.emit(layer_id, coords)
 	return old
 
+## 矩形填充（design.md §2.2）：立即应用并返回变更记录 [{cell, old}]，供命令栈合成整段撤销
+## skip_existing=true 时已有内容的格跳过（「遇到已有内容停止」模式）；层无效/锁定返回空数组
+func fill_rect(layer_id: String, rect: Rect2i, asset_id: String, skip_existing := false) -> Array:
+	var idx := _layer_index(layer_id)
+	if idx < 0 or _layers[idx]["type"] != "tile" or bool(_layers[idx].get("locked", false)):
+		push_warning("[TileMason] fill_rect：图层无效或已锁定 %s" % layer_id)
+		return []
+	var entries := []
+	for y in range(rect.position.y, rect.end.y):
+		for x in range(rect.position.x, rect.end.x):
+			var cell := Vector2i(x, y)
+			if skip_existing and not get_tile(layer_id, cell).is_empty():
+				continue
+			var prev: Variant = set_tile(layer_id, cell, asset_id)
+			if prev != null:
+				entries.append({"cell": cell, "old": prev})
+	return entries
+
 func get_tile(layer_id: String, coords: Vector2i) -> Dictionary:
 	if not _tiles.has(layer_id):
 		return {}
