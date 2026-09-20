@@ -131,6 +131,19 @@ func get_tile(layer_id: String, coords: Vector2i) -> Dictionary:
 		return {}
 	return (_tiles[layer_id] as Dictionary).get(coords, {})
 
+## 某层全部有方块的格坐标（视图重建与导出遍历用）
+func get_tile_coords(layer_id: String) -> Array:
+	if not _tiles.has(layer_id):
+		return []
+	return (_tiles[layer_id] as Dictionary).keys()
+
+## 文档是否已有内容（任意 tile 层有方块或存在任何物件）
+func has_content() -> bool:
+	for layer_id in _tiles.keys():
+		if not (_tiles[layer_id] as Dictionary).is_empty():
+			return true
+	return not _objects.is_empty()
+
 func _ensure_tile_store(layer_id: String) -> Dictionary:
 	if not _tiles.has(layer_id):
 		_tiles[layer_id] = {}
@@ -183,6 +196,24 @@ func update_object(object_id: int, patch: Dictionary, force := false) -> Variant
 			obj[key] = normalized[key]
 	object_changed.emit(object_id)
 	return old
+
+## 插入完整物件（含既有 id，供序列化重建与命令栈重做复用）；id 计数器前移保持唯一
+func insert_object(obj: Dictionary, force := false) -> int:
+	var object_id := int(obj.get("id", 0))
+	if object_id <= 0:
+		return add_object(obj, force)
+	var normalized := _normalize_object(obj, object_id)
+	var layer := get_layer(str(normalized["layer"]))
+	if str(normalized["asset_id"]).is_empty() or layer.is_empty() or layer["type"] != "object":
+		push_warning("[TileMason] insert_object：物件数据无效（layer=%s）" % str(normalized["layer"]))
+		return -1
+	if not force and bool(layer.get("locked", false)):
+		push_warning("[TileMason] insert_object：图层已锁定 %s" % str(normalized["layer"]))
+		return -1
+	_objects[object_id] = normalized
+	_next_object_id = maxi(_next_object_id, object_id + 1)
+	object_added.emit(object_id)
+	return object_id
 
 func remove_object(object_id: int, force := false) -> Variant:
 	## 删除物件；返回被删物件；不存在或图层锁定返回 null

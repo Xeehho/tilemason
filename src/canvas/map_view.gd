@@ -1,0 +1,137 @@
+class_name MapView
+extends Node2D
+## 地图视图：把 MapDocument 数据渲染到画布（P0：每格/每物件一个 Sprite2D，轻量可替换）
+## 像素纪律：1:1 原生尺寸 + 最近邻过滤（本节点设置后子节点继承），禁任意缩放
+## 注：形态A TileMapLayer 配方（dev-pitfalls 21）为 P4 运行时导出目标；
+##     编辑器画布先用 Sprite 渲染，数据模型不变，后续可整体替换渲染层
+
+const OBJECT_Z := 10 ## 物件层基准 z（整体在 tile 层之上，同层内 y-sort）
+
+var document: MapDocument
+var library: AssetLibrary
+var grid_px := 16
+
+var _tile_sprites := {} # "layer|x,y" -> Sprite2D
+var _object_sprites := {} # object_id(int) -> Sprite2D
+var _props_root: Node2D
+var _layer_z := {} # layer_id -> z_index（tile 层按图层栈顺序）
+
+func setup(doc: MapDocument, lib: AssetLibrary) -> void:
+	document = doc
+	library = lib
+	grid_px = doc.grid_px
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	z_index = -5 # 画布内容在网格覆盖层(100)之下
+
+	_props_root = Node2D.new()
+	_props_root.y_sort_enabled = true # 同层物件按 y 排序遮挡（design.md §4：图层顺序与 y-sort 分离）
+	_props_root.z_index = OBJECT_Z
+	add_child(_props_root)
+
+	var z := 0
+	for layer in doc.get_layers():
+		_layer_z[str((layer as Dictionary)["id"])] = z
+		z += 1
+
+	document.tile_changed.connect(_on_tile_changed)
+	document.object_added.connect(func(id: int) -> void: _sync_object(id))
+	document.object_changed.connect(func(id: int) -> void: _sync_object(id))
+	document.object_removed.connect(func(id: int) -> void: _remove_object(id))
+	_rebuild()
+
+## ---- 供探针/工具检视 ----
+
+func tile_sprite_count() -> int:
+	return _tile_sprites.size()
+
+func get_tile_sprite(layer_id: String, coords: Vector2i) -> Sprite2D:
+	return _tile_sprites.get(_tile_key(layer_id, coords))
+
+func get_object_sprite(object_id: int) -> Sprite2D:
+	return _object_sprites.get(object_id)
+
+## ---- 内部：tile 渲染 ----
+
+func _tile_key(layer_id: String, coords: Vector2i) -> String:
+	return "%s|%d,%d" % [layer_id, coords.x, coords.y]
+
+func _on_tile_changed(layer_id: String, coords: Vector2i) -> void:
+	var entry := document.get_tile(layer_id, coords)
+	if entry.is_empty():
+		var sprite: Sprite2D = _tile_sprites.get(_tile_key(layer_id, coords))
+		if sprite != null:
+			sprite.queue_free()
+			_tile_sprites.erase(_tile_key(layer_id, coords))
+		return
+	_upsert_tile_sprite(layer_id, coords, str(entry["asset_id"]))
+
+func _upsert_tile_sprite(layer_id: String, coords: Vector2i, asset_id: String) -> void:
+	var key := _tile_key(layer_id, coords)
+	var sprite := _tile_sprites.get(key) as Sprite2D
+	var tex := library.load_texture(asset_id)
+	if tex == null:
+		return # 素材缺图：数据保留，渲染跳过
+	if sprite == null:
+		sprite = Sprite2D.new()
+		sprite.centered = false # 规则方块左上角锚（design.md §2.1）
+		add_child(sprite)
+		_tile_sprites[key] = sprite
+	sprite.texture = tex
+	sprite.position = Vector2(coords) * grid_px
+	sprite.z_index = int(_layer_z.get(layer_id, 0))
+
+## ---- 内部：物件渲染 ----
+
+func _sync_object(object_id: int) -> void:
+	var obj := document.get_object(object_id)
+	if obj.is_empty():
+		_remove_object(object_id)
+		return
+	var tex := library.load_texture(str(obj["asset_id"]))
+	if tex == null:
+		return
+	var sprite := _object_sprites.get(object_id) as Sprite2D
+	if sprite == null:
+		sprite = Sprite2D.new()
+		_props_root.add_child(sprite)
+		_object_sprites[object_id] = sprite
+	sprite.texture = tex
+	sprite.flip_h = bool(obj["mirror_h"])
+	sprite.flip_v = bool(obj["mirror_v"])
+	# 锚点约定：cell=占格左上角；渲染锚=占格底边中心（形态A 同款几何）
+	# Sprite 居中放置 → 中心点 = 锚点上方半个图高；占格尺寸来自素材定义（§9.2 物件只存锚点格）
+	var cell: Vector2i = obj["cell"]
+	var asset := library.get_asset(str(obj["asset_id"]))
+	var cells: Vector2i = Vector2i.ONE
+	if not asset.is_empty():
+		cells = asset["cells"]
+	var anchor_x := float(cell.x) * grid_px + cells.x * grid_px / 2.0
+	var anchor_y := float(cell.y) * grid_px + cells.y * grid_px
+	sprite.centered = true
+	sprite.position = Vector2(anchor_x, anchor_y - tex.get_height() / 2.0)
+
+func _remove_object(object_id: int) -> void:
+	var sprite: Sprite2D = _object_sprites.get(object_id)
+	if sprite != null:
+		sprite.queue_free()
+		_object_sprites.erase(object_id)
+
+## ---- 全量重建（加载文档/初始化）----
+
+func _rebuild() -> void:
+	for key in _tile_sprites.keys():
+		(_tile_sprites[key] as Sprite2D).queue_free()
+	_tile_sprites.clear()
+	for child in _props_root.get_children():
+		child.queue_free()
+	_object_sprites.clear()
+	for layer in document.get_layers():
+		var layer_id := str((layer as Dictionary)["id"])
+		if layer_id.is_empty() or (layer as Dictionary)["type"] != "tile":
+			continue
+		for coords in document.get_tile_coords(layer_id):
+			var entry := document.get_tile(layer_id, coords as Vector2i)
+			if not entry.is_empty():
+				_upsert_tile_sprite(layer_id, coords as Vector2i, str(entry["asset_id"]))
+	for obj in document.get_objects():
+		_sync_object(int((obj as Dictionary)["id"]))

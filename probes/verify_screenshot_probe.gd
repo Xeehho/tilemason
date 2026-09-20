@@ -69,6 +69,19 @@ func _test_canvas_region(img: Image) -> void:
 	var mn := float(values.min())
 	var mx := float(values.max())
 	_check(mx - mn > 0.02, "画布区网格线可见（纵向亮度极差 %.4f > 0.02）" % (mx - mn))
+	# 摆样内容（--screenshot 模式自动摆的道路/建筑）应出现在画布区
+	var road := _count_region(img, 0, panel_left, Color("555555"))
+	_check(road > 40, "画布区出现道路（道路灰像素 %d > 40）" % road)
+	var roof := _count_region(img, 0, panel_left, Color("8b3a2f"))
+	_check(roof > 40, "画布区出现建筑屋顶（砖红像素 %d > 40）" % roof)
+
+func _count_region(img: Image, x0: int, x1: int, color: Color) -> int:
+	var count := 0
+	for y in range(0, img.get_height(), 2):
+		for x in range(x0, x1, 2):
+			if _near(img.get_pixel(x, y), color):
+				count += 1
+	return count
 
 func _longest_run(img: Image, x0: int, x1: int, color: Color) -> int:
 	var best := 0
