@@ -24,6 +24,7 @@ func _init() -> void:
 	_test_pick(doc, view)
 	_test_stroke(doc, view)
 	_test_layer_visibility(doc, view)
+	_test_selection(doc, view)
 	_test_rebuild(doc, lib, view)
 	_cleanup()
 	print("[TileMason] 探针结束：通过 %d / 失败 %d" % [_pass, _fail])
@@ -152,6 +153,52 @@ func _test_layer_visibility(doc: MapDocument, view: MapView) -> void:
 	doc.set_layer_property("deco", "visible", false)
 	_check(os != null and not os.visible, "物件层隐藏生效")
 	doc.set_layer_property("deco", "visible", true)
+
+func _test_selection(doc: MapDocument, view: MapView) -> void:
+	# 选区模型
+	var sel := Selection.new()
+	sel.add_object(1)
+	sel.add_object(1)
+	_check(sel.object_count() == 1, "选区物件去重")
+	sel.add_object(2)
+	sel.set_objects([3, 4, 4])
+	_check(sel.object_count() == 2 and sel.has_object(3) and not sel.has_object(1), "整批设置清旧+去重")
+	sel.add_cell("ground", Vector2i(0, 0))
+	sel.add_cell("ground", Vector2i(0, 0))
+	_check(sel.cell_count() == 1, "格选区去重")
+	sel.clear()
+	_check(sel.is_empty(), "清空选区")
+
+	# 框选命中（物件 30,0 与 40,0，前测物件在别处）
+	var a := doc.add_object({"asset_id": "probe_mv/props/prop.png", "layer": "deco", "cell": Vector2i(30, 0)})
+	doc.add_object({"asset_id": "probe_mv/props/prop.png", "layer": "deco", "cell": Vector2i(40, 0)})
+	_check(view.objects_in_rect(Rect2i(Vector2i(29, -1), Vector2i(5, 5))) == [a], "框选命中单个物件")
+	_check(view.objects_in_rect(Rect2i(Vector2i(0, 0), Vector2i(100, 20))).size() >= 2, "大框选命中多物件")
+
+	# 高亮/拖动预览/回同步
+	view.set_objects_tinted([a], true)
+	_check(view.get_object_sprite(a) != null and view.get_object_sprite(a).modulate != Color.WHITE, "选中高亮生效")
+	view.set_objects_tinted([a], false)
+	view.begin_object_drag([a])
+	view.drag_object_sprites([a], Vector2(32, 16))
+	view.resync_objects([a])
+	_check(view.get_object_sprite(a) != null, "拖动预览与回同步不崩溃")
+
+	# 移动命令往返
+	var stack := CommandStack.new()
+	var from: Vector2i = doc.get_object(a)["cell"]
+	var to := from + Vector2i(2, 3)
+	var entries := [{"id": a, "from": from, "to": to}]
+	var do_move := func() -> void:
+		for e in entries:
+			doc.update_object(int((e as Dictionary)["id"]), {"cell": (e as Dictionary)["to"]}, true)
+	var undo_move := func() -> void:
+		for e in entries:
+			doc.update_object(int((e as Dictionary)["id"]), {"cell": (e as Dictionary)["from"]}, true)
+	stack.push("移动", do_move, undo_move)
+	_check(doc.get_object(a)["cell"] == to, "移动命令应用")
+	stack.undo()
+	_check(doc.get_object(a)["cell"] == from, "撤销移动恢复原位")
 
 func _test_rebuild(doc: MapDocument, lib: AssetLibrary, view: MapView) -> void:
 	var tiles_before := view.tile_sprite_count()

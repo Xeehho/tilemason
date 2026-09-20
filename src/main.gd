@@ -31,6 +31,12 @@ var _erase_layer := ""
 var _recting := false ## 矩形填充拖框进行中（Ctrl+左键，design.md §2.2/§6.3）
 var _rect_start := Vector2i.ZERO
 var _rect_preview: RectPreview
+var _selection := Selection.new() ## 选区（S 选择模式）
+var _select_mode := false ## S 键切换：框选/移动物件（design.md §2.1/§7）
+var _marqueeing := false ## 框选拖动进行中
+var _marquee_start := Vector2i.ZERO
+var _moving := false ## 选中物件拖动进行中
+var _move_start_px := Vector2.ZERO
 
 func _ready() -> void:
 	var camera := EditorCamera.new()
@@ -101,7 +107,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			if mb.pressed:
-				if mb.ctrl_pressed and not _eraser_mode:
+				if _select_mode:
+					_begin_select_action()
+				elif mb.ctrl_pressed:
 					_begin_rect() # Ctrl+左键：矩形填充拖框
 				elif _eraser_mode:
 					_begin_erase()
@@ -109,6 +117,7 @@ func _unhandled_input(event: InputEvent) -> void:
 					_begin_paint()
 			else:
 				_end_rect()
+				_end_select_action()
 				_end_paint()
 				_end_erase()
 		elif mb.pressed and mb.button_index == MOUSE_BUTTON_RIGHT:
@@ -122,6 +131,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		_erase_to(mouse_cell())
 	elif event is InputEventMouseMotion and _recting:
 		_update_rect_preview(mouse_cell())
+	elif event is InputEventMouseMotion and _marqueeing:
+		_update_marquee_preview(mouse_cell())
+	elif event is InputEventMouseMotion and _moving:
+		_view.drag_object_sprites(_selection.object_ids(), get_global_mouse_position() - _move_start_px)
 	elif event is InputEventKey and event.pressed and not event.echo:
 		var key := event as InputEventKey
 		if key.ctrl_pressed and key.keycode == KEY_Z:
@@ -134,6 +147,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_load_map(true)
 		elif key.keycode == KEY_E:
 			_toggle_eraser()
+		elif key.keycode == KEY_S and not key.ctrl_pressed:
+			_toggle_select_mode()
+		elif key.keycode == KEY_ESCAPE:
+			_exit_select_mode()
 		elif key.keycode == KEY_F9:
 			_run_map_check()
 
@@ -239,6 +256,100 @@ func _end_rect() -> void:
 			else:
 				_document.set_tile(layer_id, e["cell"], str(prev["asset_id"]), true)
 	_commands.push("矩形填充 %d 格%s" % [entries.size(), "（跳过已有）" if skip else ""], do_fill, undo_fill)
+
+## ---- 选择模式（design.md §2.1/§7：框选、多选移动）----
+
+func _toggle_select_mode() -> void:
+	if _select_mode:
+		_exit_select_mode()
+		return
+	_select_mode = true
+	print("[TileMason] 选择模式：拖框选物件，拖动选中物件移动，Esc/S 退出")
+
+func _exit_select_mode() -> void:
+	if not _select_mode:
+		return
+	_select_mode = false
+	_marqueeing = false
+	_moving = false
+	_rect_preview.clear_rect()
+	_view.set_objects_tinted(_selection.object_ids(), false)
+	_view.resync_objects(_selection.object_ids()) # 丢弃未提交的拖动位移
+	_selection.clear()
+	print("[TileMason] 选择模式关闭")
+
+## 按下：点中已选物件→拖动移动；否则→框选
+func _begin_select_action() -> void:
+	if _mouse_over_panel():
+		return
+	var cell := mouse_cell()
+	var hits := _view.objects_in_rect(Rect2i(cell, Vector2i.ONE))
+	var hit_id := -1
+	for id in hits:
+		hit_id = int(id) # 取最后一个（近似最上层）
+	if hit_id >= 0 and _selection.has_object(hit_id):
+		_moving = true
+		_move_start_px = get_global_mouse_position()
+		_view.begin_object_drag(_selection.object_ids())
+	else:
+		_marqueeing = true
+		_marquee_start = cell
+		_update_marquee_preview(cell)
+
+func _update_marquee_preview(cell: Vector2i) -> void:
+	var r := Rect2i(Vector2i(mini(_marquee_start.x, cell.x), mini(_marquee_start.y, cell.y)),
+		Vector2i(absi(cell.x - _marquee_start.x) + 1, absi(cell.y - _marquee_start.y) + 1))
+	_rect_preview.set_rect_px(Rect2(Vector2(r.position) * DEFAULT_GRID, Vector2(r.size) * DEFAULT_GRID))
+
+func _end_select_action() -> void:
+	if _marqueeing:
+		_marqueeing = false
+		_rect_preview.clear_rect()
+		var cell := mouse_cell()
+		var rect := Rect2i(Vector2i(mini(_marquee_start.x, cell.x), mini(_marquee_start.y, cell.y)),
+			Vector2i(absi(cell.x - _marquee_start.x) + 1, absi(cell.y - _marquee_start.y) + 1))
+		if rect.size == Vector2i.ONE:
+			# 单击：点中物件→单选；空地→清空
+			var hits := _view.objects_in_rect(Rect2i(cell, Vector2i.ONE))
+			_apply_selection(hits if not hits.is_empty() else [])
+		else:
+			_apply_selection(_view.objects_in_rect(rect))
+	elif _moving:
+		_moving = false
+		var delta_cell := Vector2i(((get_global_mouse_position() - _move_start_px) / float(DEFAULT_GRID)).round())
+		if delta_cell == Vector2i.ZERO:
+			_view.resync_objects(_selection.object_ids())
+			return
+		_commit_move(delta_cell)
+
+func _apply_selection(ids: Array) -> void:
+	_view.set_objects_tinted(_selection.object_ids(), false)
+	_selection.set_objects(ids)
+	_view.set_objects_tinted(ids, true)
+	if ids.is_empty():
+		print("[TileMason] 取消选择")
+	else:
+		print("[TileMason] 选中 %d 件物件" % ids.size())
+
+## 拖动提交：整体位移一格增量，单命令可撤销（design.md §7 多选移动）
+func _commit_move(delta_cell: Vector2i) -> void:
+	var entries := []
+	for id in _selection.object_ids():
+		var obj := _document.get_object(int(id))
+		if obj.is_empty():
+			continue
+		var from: Vector2i = obj["cell"]
+		entries.append({"id": int(id), "from": from, "to": from + delta_cell})
+	if entries.is_empty():
+		_view.resync_objects(_selection.object_ids())
+		return
+	var do_move := func() -> void:
+		for e in entries:
+			_document.update_object(int((e as Dictionary)["id"]), {"cell": (e as Dictionary)["to"]}, true)
+	var undo_move := func() -> void:
+		for e in entries:
+			_document.update_object(int((e as Dictionary)["id"]), {"cell": (e as Dictionary)["from"]}, true)
+	_commands.push("移动 %d 件 %s" % [entries.size(), str(delta_cell)], do_move, undo_move)
 
 func _toggle_eraser() -> void:
 	_eraser_mode = not _eraser_mode

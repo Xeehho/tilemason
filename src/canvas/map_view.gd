@@ -87,6 +87,46 @@ func pick_object_on_layer(layer_id: String, cell: Vector2i) -> int:
 			found = int(o["id"]) # 继续找，保留后加入的
 	return found
 
+## 框选（design.md §7）：脚印与矩形相交的物件 id 列表
+func objects_in_rect(rect: Rect2i) -> Array:
+	var result := []
+	for obj in document.get_objects():
+		var o := obj as Dictionary
+		var tl: Vector2i = o["cell"]
+		var asset := library.get_asset(str(o["asset_id"]))
+		var cells: Vector2i = Vector2i.ONE if asset.is_empty() else asset["cells"]
+		if Rect2i(tl, cells).intersects(rect):
+			result.append(int(o["id"]))
+	return result
+
+## ---- 选择模式视觉支持 ----
+
+## 选中高亮（黄色调，与半透明预览区分）
+func set_objects_tinted(object_ids: Array, on: bool) -> void:
+	for id in object_ids:
+		var s := _object_sprites.get(int(id)) as Sprite2D
+		if s != null:
+			s.modulate = Color(1.0, 0.85, 0.4) if on else Color.WHITE
+
+## 拖动预览：记录基准位置（只动 Sprite 不动文档）
+func begin_object_drag(object_ids: Array) -> void:
+	for id in object_ids:
+		var s := _object_sprites.get(int(id)) as Sprite2D
+		if s != null:
+			s.set_meta("_base_pos", s.position)
+
+## 拖动预览：按像素位移偏移选中 Sprite（取消时 resync 回文档位置）
+func drag_object_sprites(object_ids: Array, delta_px: Vector2) -> void:
+	for id in object_ids:
+		var s := _object_sprites.get(int(id)) as Sprite2D
+		if s != null and s.has_meta("_base_pos"):
+			s.position = (s.get_meta("_base_pos") as Vector2) + delta_px
+
+## 按文档数据重算物件位置（拖动取消/外部修改后）
+func resync_objects(object_ids: Array) -> void:
+	for id in object_ids:
+		_sync_object(int(id))
+
 ## ---- 内部：tile 渲染 ----
 
 func _tile_key(layer_id: String, coords: Vector2i) -> String:
