@@ -187,6 +187,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_copy_selected()
 		elif key.ctrl_pressed and key.keycode == KEY_V:
 			_paste_clipboard()
+		elif key.ctrl_pressed and key.keycode == KEY_A:
+			_select_all()
 		elif key.keycode == KEY_DELETE:
 			_delete_selected()
 		elif key.keycode == KEY_H and not key.ctrl_pressed:
@@ -712,6 +714,22 @@ func _mirror_selected() -> void:
 		for e in entries:
 			_document.update_object(int((e as Dictionary)["id"]), {"mirror_h": (e as Dictionary)["from"]}, true)
 	_commands.push("镜像 %d 件" % entries.size(), do_mirror, undo_mirror)
+
+## Ctrl+A 全选（选择模式下：全部物件 + 全部非空方块格）
+func _select_all() -> void:
+	if not _select_mode:
+		_toggle_select_mode()
+	var ids := []
+	for obj in _document.get_objects():
+		ids.append(int((obj as Dictionary)["id"]))
+	var cells := {}
+	for layer in _document.get_layers():
+		var layer_id := str((layer as Dictionary)["id"])
+		if str((layer as Dictionary)["type"]) == "tile":
+			var coords: Array = _document.get_tile_coords(layer_id)
+			if not coords.is_empty():
+				cells[layer_id] = coords
+	_apply_selection(ids, cells)
 
 func _toggle_eraser() -> void:
 	_eraser_mode = not _eraser_mode
