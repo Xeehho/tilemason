@@ -46,6 +46,17 @@ TileMason 是**独立桌面软件**——最终用户（美术、策划、关卡
 3. 用 Godot 打开项目根目录的 `project.godot`，等待导入完成。
 4. 按 **F5** 运行：滚轮缩放画布，中键（或空格+左键）拖拽平移。
 
+### 发布流程（维护者）
+
+推送 `v*` 标签即触发机器人自动构建并发布：
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+CI（GitHub Actions）会自动导出 Windows / Linux / macOS 免安装包并挂到 GitHub Release。也可在 Actions 页手动触发 **Release** 工作流做一次试构建（产物在该次运行页下载，不会发布）。
+
 ## 素材约定
 
 - TileMason **不内置任何素材包**（版权原因），自带素材放入 `assets/packs/<包名>/`，详见 [assets/packs/README.md](assets/packs/README.md)。

@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GODOT_VERSION: "4.6.2"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Godot 与导出模板
+        run: |
+          wget -q "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q "Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          chmod +x "Godot_v${GODOT_VERSION}-stable_linux.x86_64"
+          wget -q "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          mkdir -p ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          unzip -q "Godot_v${GODOT_VERSION}-stable_export_templates.tpz" -d /tmp/templates
+          mv /tmp/templates/templates/* ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable/
+
+      - name: 导入项目
+        run: "./Godot_v${GODOT_VERSION}-stable_linux.x86_64 --headless --path . --import"
+
+      - name: 导出 Windows / Linux / macOS
+        run: |
+          mkdir -p builds
+          "./Godot_v${GODOT_VERSION}-stable_linux.x86_64" --headless --path . --export-release "Windows Desktop"
+          "./Godot_v${GODOT_VERSION}-stable_linux.x86_64" --headless --path . --export-release "Linux"
+          "./Godot_v${GODOT_VERSION}-stable_linux.x86_64" --headless --path . --export-release "macOS"
+          cd builds && zip -q tilemason_linux.zip tilemason_linux.x86_64 && cd ..
+          ls -lh builds/
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: tilemason-builds
+          path: |
+            builds/tilemason_windows.exe
+            builds/tilemason_linux.zip
+            builds/tilemason_macos.zip
+
+      - name: 发布 GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            builds/tilemason_windows.exe
+            builds/tilemason_linux.zip
+            builds/tilemason_macos.zip
+          body: |
+            TileMason ${{ github.ref_name }}
+
+            - **Windows**：`tilemason_windows.exe` 免安装单文件，双击即用
+            - **Linux**：`tilemason_linux.zip` 解压后运行
+            - **macOS**：`tilemason_macos.zip` 未签名——首次打开请右键 → 打开
