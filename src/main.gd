@@ -4,6 +4,9 @@ extends Node2D
 
 const DEFAULT_GRID := 16 ## 默认正式网格（px）
 
+var _document := MapDocument.new() ## 地图文档（design.md §9：规则方块层 + 自由物件层）
+var _commands := CommandStack.new() ## 命令栈（撤销/重做地基，后续工具路由接入）
+
 func _ready() -> void:
 	var camera := EditorCamera.new()
 	add_child(camera) # 唯一相机自动接管视图
@@ -12,4 +15,4 @@ func _ready() -> void:
 	grid.grid_size = DEFAULT_GRID
 	add_child(grid)
 
-	print("[TileMason] 编辑器骨架启动：grid=%dpx，滚轮缩放，中键/空格+左键平移" % DEFAULT_GRID)
+	print("[TileMason] 编辑器骨架启动：grid=%dpx，文档 %d 层就绪；滚轮缩放，中键/空格+左键平移" % [DEFAULT_GRID, _document.layer_count()])
