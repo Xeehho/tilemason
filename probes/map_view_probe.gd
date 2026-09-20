@@ -147,6 +147,13 @@ func _test_layer_visibility(doc: MapDocument, view: MapView) -> void:
 	_check(s2 != null and not s2.visible, "隐藏期间新增的 Sprite 也隐藏")
 	doc.set_layer_property("ground", "visible", true)
 	_check(s != null and s.visible and s2 != null and s2.visible, "恢复显示后全部可见")
+	# 透明度（design.md §4）
+	doc.set_layer_property("ground", "opacity", 0.5)
+	_check(s != null and is_equal_approx(s.modulate.a, 0.5), "图层透明度 0.5 生效")
+	doc.set_tile("ground", cell + Vector2i(2, 0), "probe_mv/tiles/tile.png") # 半透明期间新增
+	var s3 := view.get_tile_sprite("ground", cell + Vector2i(2, 0))
+	_check(s3 != null and is_equal_approx(s3.modulate.a, 0.5), "半透明期间新增 Sprite 同步初始化")
+	doc.set_layer_property("ground", "opacity", 1.0)
 	# 物件层同样生效
 	var obj_id := doc.add_object({"asset_id": "probe_mv/props/prop.png", "layer": "deco", "cell": Vector2i(20, 5)})
 	var os := view.get_object_sprite(obj_id)

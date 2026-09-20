@@ -61,7 +61,20 @@ func _make_row(layer: Dictionary) -> HBoxContainer:
 		_document.set_layer_property(layer_id, "locked", on))
 	row.add_child(locked_box)
 
-	_rows[layer_id] = {"visible": visible_box, "locked": locked_box}
+	# 透明度滑杆（design.md §4）
+	var opacity := HSlider.new()
+	opacity.min_value = 0.1
+	opacity.max_value = 1.0
+	opacity.step = 0.1
+	opacity.value = float(layer.get("opacity", 1.0))
+	opacity.custom_minimum_size = Vector2(56, 12)
+	opacity.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	opacity.tooltip_text = "图层透明度"
+	opacity.value_changed.connect(func(v: float) -> void:
+		_document.set_layer_property(layer_id, "opacity", v))
+	row.add_child(opacity)
+
+	_rows[layer_id] = {"visible": visible_box, "locked": locked_box, "opacity": opacity}
 	return row
 
 ## 文档层属性被其他入口改动时（如探针/未来菜单）同步勾选状态
@@ -71,4 +84,8 @@ func _on_layer_changed(layer_id: String, key: String) -> void:
 	var layer := _document.get_layer(layer_id)
 	if layer.is_empty():
 		return
-	(_rows[layer_id][key] as CheckBox).set_pressed_no_signal(bool(layer.get(key, key != "locked")))
+	var control := _rows[layer_id][key] as Control
+	if key == "opacity":
+		(control as HSlider).set_value_no_signal(float(layer.get(key, 1.0)))
+	else:
+		(control as CheckBox).set_pressed_no_signal(bool(layer.get(key, key != "locked")))
