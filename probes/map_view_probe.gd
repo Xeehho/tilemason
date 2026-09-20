@@ -23,6 +23,7 @@ func _init() -> void:
 	_test_undo(doc, view)
 	_test_pick(doc, view)
 	_test_stroke(doc, view)
+	_test_layer_visibility(doc, view)
 	_test_rebuild(doc, lib, view)
 	_cleanup()
 	print("[TileMason] 探针结束：通过 %d / 失败 %d" % [_pass, _fail])
@@ -132,6 +133,25 @@ func _test_stroke(doc: MapDocument, view: MapView) -> void:
 	_check(all_gone, "撤销一次回滚整段笔画")
 	stack.redo()
 	_check(view.get_tile_sprite(layer, cells[2]) != null, "重做整段恢复")
+
+func _test_layer_visibility(doc: MapDocument, view: MapView) -> void:
+	var cell := Vector2i(20, 5)
+	doc.set_tile("ground", cell, "probe_mv/tiles/tile.png")
+	var s := view.get_tile_sprite("ground", cell)
+	_check(s != null and s.visible, "默认层可见")
+	doc.set_layer_property("ground", "visible", false)
+	_check(s != null and not s.visible, "隐藏图层后 Sprite 隐藏")
+	doc.set_tile("ground", cell + Vector2i(1, 0), "probe_mv/tiles/tile.png") # 隐藏期间新增
+	var s2 := view.get_tile_sprite("ground", cell + Vector2i(1, 0))
+	_check(s2 != null and not s2.visible, "隐藏期间新增的 Sprite 也隐藏")
+	doc.set_layer_property("ground", "visible", true)
+	_check(s != null and s.visible and s2 != null and s2.visible, "恢复显示后全部可见")
+	# 物件层同样生效
+	var obj_id := doc.add_object({"asset_id": "probe_mv/props/prop.png", "layer": "deco", "cell": Vector2i(20, 5)})
+	var os := view.get_object_sprite(obj_id)
+	doc.set_layer_property("deco", "visible", false)
+	_check(os != null and not os.visible, "物件层隐藏生效")
+	doc.set_layer_property("deco", "visible", true)
 
 func _test_rebuild(doc: MapDocument, lib: AssetLibrary, view: MapView) -> void:
 	var tiles_before := view.tile_sprite_count()

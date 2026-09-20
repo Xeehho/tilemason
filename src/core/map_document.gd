@@ -10,6 +10,7 @@ signal tile_changed(layer_id: String, coords: Vector2i)
 signal object_added(object_id: int)
 signal object_removed(object_id: int)
 signal object_changed(object_id: int)
+signal layer_changed(layer_id: String, key: String)
 
 const FORMAT_VERSION: int = 1
 const ANCHOR_BOTTOM_CENTER: String = "bottom_center" # 独立物件默认锚点
@@ -67,6 +68,7 @@ func set_layer_property(layer_id: String, key: String, value: Variant) -> bool:
 		push_warning("[TileMason] set_layer_property：图层不存在 %s" % layer_id)
 		return false
 	_layers[idx][key] = value
+	layer_changed.emit(layer_id, key)
 	return true
 
 func is_layer_locked(layer_id: String) -> bool:

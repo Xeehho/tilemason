@@ -48,6 +48,8 @@ func _ready() -> void:
 	if FileAccess.file_exists(MAP_PATH):
 		_load_map(false)
 
+	_build_layer_panel()
+
 	_preview = Sprite2D.new()
 	_preview.modulate.a = 0.5 # 半透明预览（design.md §2.1）
 	_preview.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -145,6 +147,7 @@ func _load_map(manual: bool) -> void:
 	_view = MapView.new()
 	_view.setup(_document, _library)
 	add_child(_view)
+	_build_layer_panel() # 重绑新文档
 	var tiles := 0
 	for layer in _document.get_layers():
 		tiles += _document.get_tile_coords(str((layer as Dictionary)["id"])).size()
@@ -350,6 +353,26 @@ func _build_asset_panel() -> void:
 	_panel.offset_right = 0
 	_panel.offset_top = 0
 	_panel.offset_bottom = 0
+
+var _layer_panel: LayerPanel ## 图层面板（载入新文档时重绑）
+
+## 图层面板：左侧全高停靠（design.md §4 最小版：显示/锁定）
+func _build_layer_panel() -> void:
+	if _layer_panel == null:
+		var layer_ui := CanvasLayer.new()
+		layer_ui.layer = 10
+		add_child(layer_ui)
+		_layer_panel = LayerPanel.new()
+		layer_ui.add_child(_layer_panel)
+		_layer_panel.anchor_left = 0.0
+		_layer_panel.anchor_right = 0.0
+		_layer_panel.anchor_top = 0.0
+		_layer_panel.anchor_bottom = 1.0
+		_layer_panel.offset_left = 0
+		_layer_panel.offset_right = 190
+		_layer_panel.offset_top = 0
+		_layer_panel.offset_bottom = 0
+	_layer_panel.setup(_document)
 
 func _on_asset_selected(asset_id: String) -> void:
 	_selected_asset_id = asset_id

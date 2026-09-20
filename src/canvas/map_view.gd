@@ -37,6 +37,7 @@ func setup(doc: MapDocument, lib: AssetLibrary) -> void:
 	document.object_added.connect(func(id: int) -> void: _sync_object(id))
 	document.object_changed.connect(func(id: int) -> void: _sync_object(id))
 	document.object_removed.connect(func(id: int) -> void: _remove_object(id))
+	document.layer_changed.connect(_on_layer_changed)
 	_rebuild()
 
 ## ---- 供探针/工具检视 ----
@@ -91,6 +92,23 @@ func pick_object_on_layer(layer_id: String, cell: Vector2i) -> int:
 func _tile_key(layer_id: String, coords: Vector2i) -> String:
 	return "%s|%d,%d" % [layer_id, coords.x, coords.y]
 
+## 图层属性变化：visible 隐藏/显示该层全部 Sprite（design.md §4 显示/隐藏）
+func _on_layer_changed(layer_id: String, key: String) -> void:
+	if key != "visible":
+		return
+	var visible := bool(document.get_layer(layer_id).get("visible", true))
+	for key2 in _tile_sprites.keys():
+		if str(key2).begins_with(layer_id + "|"):
+			(_tile_sprites[key2] as Sprite2D).visible = visible
+	for obj in document.get_objects_on_layer(layer_id):
+		var sprite := _object_sprites.get(int((obj as Dictionary)["id"])) as Sprite2D
+		if sprite != null:
+			sprite.visible = visible
+
+## 新建 Sprite 时应用所属图层当前可见性
+func _apply_layer_visible(sprite: Sprite2D, layer_id: String) -> void:
+	sprite.visible = bool(document.get_layer(layer_id).get("visible", true))
+
 func _on_tile_changed(layer_id: String, coords: Vector2i) -> void:
 	var entry := document.get_tile(layer_id, coords)
 	if entry.is_empty():
@@ -112,6 +130,7 @@ func _upsert_tile_sprite(layer_id: String, coords: Vector2i, asset_id: String) -
 		sprite.centered = false # 规则方块左上角锚（design.md §2.1）
 		add_child(sprite)
 		_tile_sprites[key] = sprite
+		_apply_layer_visible(sprite, layer_id)
 	sprite.texture = tex
 	sprite.position = Vector2(coords) * grid_px
 	sprite.z_index = int(_layer_z.get(layer_id, 0))
@@ -131,6 +150,7 @@ func _sync_object(object_id: int) -> void:
 		sprite = Sprite2D.new()
 		_props_root.add_child(sprite)
 		_object_sprites[object_id] = sprite
+		_apply_layer_visible(sprite, str(obj["layer"]))
 	sprite.texture = tex
 	sprite.flip_h = bool(obj["mirror_h"])
 	sprite.flip_v = bool(obj["mirror_v"])
