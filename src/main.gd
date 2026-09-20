@@ -122,6 +122,17 @@ func _unhandled_input(event: InputEvent) -> void:
 			_load_map(true)
 		elif key.keycode == KEY_E:
 			_toggle_eraser()
+		elif key.keycode == KEY_F9:
+			_run_map_check()
+
+## F9：导出前地图检查（design.md §8 最小版，验收 9）
+func _run_map_check() -> void:
+	var issues := MapChecker.check_all(_document, _library)
+	if issues.is_empty():
+		print("[TileMason] 地图检查通过：道路连通，无建筑堵路")
+		return
+	for issue in issues:
+		print("[TileMason] [检查] %s" % str((issue as Dictionary)["message"]))
 
 ## 保存当前地图（P0 固定槽位；design.md §10 另存为/版本随后续 UI 扩展）
 func _save_map() -> void:
