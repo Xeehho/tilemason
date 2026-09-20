@@ -959,7 +959,11 @@ func _demo_place_for_screenshot() -> void:
 	# 建筑与树（物件，底边中心锚自动对齐）
 	_place_asset(_demo_asset("props/house.png"), Vector2i(2, 2))
 	_place_asset(_demo_asset("props/tree_small.png"), Vector2i(5, 1))
-	print("[TileMason] 截图摆样完成：道路×5、草地×2、建筑×1、树×1")
+	# 墙体一列 + 摊位（demo 扩充素材）
+	for x in range(-10, -6):
+		_place_asset(_demo_asset("tiles/wall_brick.png"), Vector2i(x, 2))
+	_place_asset(_demo_asset("props/stall_red.png"), Vector2i(7, 3))
+	print("[TileMason] 截图摆样完成：道路×5、草地×2、建筑×1、树×1、砖墙×4、摊位×1")
 
 func _demo_asset(file: String) -> Dictionary:
 	return _library.get_asset("demo/" + file)
