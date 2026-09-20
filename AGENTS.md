@@ -41,8 +41,9 @@ CI 在 push/PR 自动跑同样三道关。**禁止目测估框：改动效果必
 
 改代码前先扫一遍 [docs/dev-pitfalls.md](docs/dev-pitfalls.md)（Godot 4.6 语法/对象/TileMap/导出四类 24 条），能避开绝大多数返工。
 
-## 本地工作流（ZCode 会话）
+## 本地工作流（ZCode 会话 · 全自动无人值守）
 
+- **自动提交与推送（用户 2026-09-20 授权）**：本仓库由定时任务无人值守开发。需求开发结束且验证三关通过、`.zcode/gameWork.md` 记录完毕后，AI **无须询问用户，直接自行 commit 并 push 到 main**；**唯一例外：打 tag 触发 Release 发布必须经用户确认，禁止静默 tag**
 - `.zcode/rules/`（本地文件，已 gitignore）：需求变更记录（`.zcode/gameWork.md`）/ 长任务交接（`.zcode/tasks/`）/ 开发完成自动保存提交——与主项目同款纪律
 - 交接文件：长任务开工即建 `.zcode/tasks/<slug>.md`，续跑会话先读再动手
-- commit 规范：类型前缀（feat/fix/docs/chore/refactor）；AI 协作提交带 `Co-authored-by: GLM <noreply@z.ai>`；**推送远程须经用户确认，禁止静默 push**
+- commit 规范：类型前缀（feat/fix/docs/chore/refactor）；说明须写清「改了什么、为什么」，正文必要时分点展开，禁止一句话敷衍；AI 协作提交带 `Co-authored-by: GLM <noreply@z.ai>`；**push 前代码类改动必须已过验证三关**
