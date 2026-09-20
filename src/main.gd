@@ -100,10 +100,10 @@ func _process(_delta: float) -> void:
 		_preview.position = Vector2(cell) * DEFAULT_GRID
 	else:
 		var cells: Vector2i = asset["cells"]
-		var anchor_x := float(cell.x) * DEFAULT_GRID + cells.x * DEFAULT_GRID / 2.0
-		var anchor_y := float(cell.y) * DEFAULT_GRID + cells.y * DEFAULT_GRID
+		# 预览与放置共用同一几何：鼠标格=占格底边中心（修复图影与落点不一致）
+		var cell_tl := MapView.footprint_cell_tl(cells, cell)
 		_preview.centered = true
-		_preview.position = Vector2(anchor_x, anchor_y - tex.get_height() / 2.0)
+		_preview.position = MapView.object_sprite_position(cell_tl, cells, DEFAULT_GRID, tex.get_height())
 	_preview.visible = true
 
 func _mouse_over_panel() -> bool:
@@ -717,7 +717,7 @@ func _place_asset(asset: Dictionary, cell: Vector2i) -> void:
 		_commands.push("放置 %s" % str(asset["name"]), do_place, undo_place)
 	else:
 		var cells: Vector2i = asset["cells"]
-		var cell_tl := cell - Vector2i((cells.x - 1) / 2, cells.y - 1) # 底边中心对齐鼠标格
+		var cell_tl := MapView.footprint_cell_tl(cells, cell) # 底边中心对齐鼠标格（与预览同源）
 		var do_add := func() -> void:
 			if not ctx.has("obj"):
 				var new_id := _document.add_object({"asset_id": asset_id, "layer": layer_id, "cell": cell_tl})

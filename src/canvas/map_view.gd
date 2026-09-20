@@ -16,6 +16,17 @@ var _object_sprites := {} # object_id(int) -> Sprite2D
 var _props_root: Node2D
 var _layer_z := {} # layer_id -> z_index（tile 层按图层栈顺序）
 
+## 物件占格左上角：鼠标格=占格底边中心（design.md §2.1 建筑自动落底边锚）
+## 放置与预览必须同用此函数，否则「图影与落点不一致」（2026-09-20 用户验收实测踩中）
+static func footprint_cell_tl(cells: Vector2i, mouse_cell: Vector2i) -> Vector2i:
+	return mouse_cell - Vector2i((cells.x - 1) / 2, cells.y - 1)
+
+## 物件居中 Sprite 的世界坐标（锚=占格底边中心；tex_h 为原图像素高）
+static func object_sprite_position(cell_tl: Vector2i, cells: Vector2i, grid_px: int, tex_h: int) -> Vector2:
+	var anchor_x := float(cell_tl.x) * grid_px + cells.x * grid_px / 2.0
+	var anchor_y := float(cell_tl.y) * grid_px + cells.y * grid_px
+	return Vector2(anchor_x, anchor_y - tex_h / 2.0)
+
 func setup(doc: MapDocument, lib: AssetLibrary) -> void:
 	document = doc
 	library = lib
@@ -211,10 +222,8 @@ func _sync_object(object_id: int) -> void:
 	var cells: Vector2i = Vector2i.ONE
 	if not asset.is_empty():
 		cells = asset["cells"]
-	var anchor_x := float(cell.x) * grid_px + cells.x * grid_px / 2.0
-	var anchor_y := float(cell.y) * grid_px + cells.y * grid_px
 	sprite.centered = true
-	sprite.position = Vector2(anchor_x, anchor_y - tex.get_height() / 2.0)
+	sprite.position = object_sprite_position(cell, cells, grid_px, tex.get_height())
 
 func _remove_object(object_id: int) -> void:
 	var sprite: Sprite2D = _object_sprites.get(object_id)

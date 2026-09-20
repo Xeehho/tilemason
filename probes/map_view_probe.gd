@@ -162,6 +162,22 @@ func _test_layer_visibility(doc: MapDocument, view: MapView) -> void:
 	doc.set_layer_property("deco", "visible", true)
 
 func _test_selection(doc: MapDocument, view: MapView) -> void:
+	# 预览/放置/渲染三处同源几何（回归：多格物件图影与落点曾不一致，2026-09-20 用户实测）
+	var mouse := Vector2i(5, 5)
+	var cells3 := Vector2i(3, 3)
+	var tl3 := MapView.footprint_cell_tl(cells3, mouse)
+	_check(tl3 == Vector2i(4, 3), "3×3 占格左上角=鼠标-(1,2)")
+	var expect3 := MapView.object_sprite_position(tl3, cells3, 16, 48)
+	var id_g := doc.add_object({"asset_id": "probe_mv/props/prop.png", "layer": "deco", "cell": tl3})
+	var sg := view.get_object_sprite(id_g)
+	_check(sg != null and sg.position == expect3, "渲染位置与几何函数一致（48px 件）")
+	var cells2 := Vector2i(2, 2)
+	var tl2 := MapView.footprint_cell_tl(cells2, mouse)
+	_check(tl2 == Vector2i(5, 4), "2×2 占格左上角=鼠标-(0,1)")
+	# 占格底边中心应落在鼠标格：锚 x=鼠标格中心、y=鼠标格下缘
+	var anchor := Vector2(float(tl3.x) * 16 + cells3.x * 8.0, float(tl3.y) * 16 + cells3.y * 16.0)
+	_check(anchor == Vector2(5 * 16 + 8, 5 * 16 + 16), "底边中心锚=鼠标格中心与下缘")
+
 	# 选区模型
 	var sel := Selection.new()
 	sel.add_object(1)
