@@ -90,6 +90,25 @@ func _unhandled_input(event: InputEvent) -> void:
 			_pick_under_mouse()
 	elif _painting and event is InputEventMouseMotion:
 		_paint_to(mouse_cell())
+	elif event is InputEventKey and event.pressed and not event.echo:
+		var key := event as InputEventKey
+		if key.ctrl_pressed and key.keycode == KEY_Z:
+			_do_undo()
+		elif key.ctrl_pressed and key.keycode == KEY_Y:
+			_do_redo()
+
+## Ctrl+Z / Ctrl+Y（design.md §6.3）
+func _do_undo() -> void:
+	if _commands.undo():
+		print("[TileMason] 撤销（剩余可撤销 %d）" % _commands.undo_count())
+	else:
+		print("[TileMason] 没有可撤销的操作")
+
+func _do_redo() -> void:
+	if _commands.redo():
+		print("[TileMason] 重做（剩余可重做 %d）" % _commands.redo_count())
+	else:
+		print("[TileMason] 没有可重做的操作")
 
 func _begin_paint() -> void:
 	if _selected_asset_id.is_empty() or _mouse_over_panel():
