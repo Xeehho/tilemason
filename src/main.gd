@@ -169,6 +169,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_paste_clipboard()
 		elif key.keycode == KEY_DELETE:
 			_delete_selected()
+		elif key.keycode == KEY_H and not key.ctrl_pressed:
+			_mirror_selected()
 		elif key.keycode == KEY_F9:
 			_run_map_check()
 
@@ -526,6 +528,26 @@ func _clear_line_preview() -> void:
 	for s in _line_sprites:
 		(s as Node2D).queue_free()
 	_line_sprites.clear()
+
+## 水平镜像选中物件（design.md §7 镜像；mirror_h 记录翻转，保留原素材方向 §3.3）
+func _mirror_selected() -> void:
+	if _selection.is_empty():
+		return
+	var entries := []
+	for id in _selection.object_ids():
+		var obj := _document.get_object(int(id))
+		if obj.is_empty():
+			continue
+		entries.append({"id": int(id), "from": bool(obj["mirror_h"]), "to": not bool(obj["mirror_h"])})
+	if entries.is_empty():
+		return
+	var do_mirror := func() -> void:
+		for e in entries:
+			_document.update_object(int((e as Dictionary)["id"]), {"mirror_h": (e as Dictionary)["to"]}, true)
+	var undo_mirror := func() -> void:
+		for e in entries:
+			_document.update_object(int((e as Dictionary)["id"]), {"mirror_h": (e as Dictionary)["from"]}, true)
+	_commands.push("镜像 %d 件" % entries.size(), do_mirror, undo_mirror)
 
 func _toggle_eraser() -> void:
 	_eraser_mode = not _eraser_mode
