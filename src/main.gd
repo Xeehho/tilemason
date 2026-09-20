@@ -39,6 +39,7 @@ var _marquee_start := Vector2i.ZERO
 var _moving := false ## 选中物件拖动进行中
 var _move_start_px := Vector2.ZERO
 var _clipboard: Array = [] ## 复制的物件快照（design.md §7 复制粘贴）
+var _clip_cells: Array = [] ## 复制的方块快照 [{layer, cell, asset_id}]；与物件共用粘贴基准
 var _line_mode := false ## L 键直线工具（design.md §2.2）
 var _line_armed := false ## 已定起点，等待终点
 var _line_start := Vector2i.ZERO
@@ -427,27 +428,36 @@ func _commit_move(delta_cell: Vector2i) -> void:
 			_document.update_object(int((e as Dictionary)["id"]), {"cell": (e as Dictionary)["from"]}, true)
 	_commands.push("移动 %d 件 %s" % [entries.size(), str(delta_cell)], do_move, undo_move)
 
-## 复制选中物件（快照入剪贴板）
+## 复制选中内容（物件快照 + 方块快照）
 func _copy_selected() -> void:
 	_clipboard.clear()
+	_clip_cells.clear()
 	for id in _selection.object_ids():
 		var obj := _document.get_object(int(id))
 		if not obj.is_empty():
 			_clipboard.append(obj.duplicate(true))
-	if _clipboard.is_empty():
-		print("[TileMason] 剪贴板为空（先在选择模式下选中物件）")
+	for layer_id in _selection.cells_by_layer().keys():
+		for c in _selection.cells_by_layer()[str(layer_id)]:
+			var entry := _document.get_tile(str(layer_id), c as Vector2i)
+			if not entry.is_empty():
+				_clip_cells.append({"layer": str(layer_id), "cell": c, "asset_id": str(entry["asset_id"])})
+	if _clipboard.is_empty() and _clip_cells.is_empty():
+		print("[TileMason] 剪贴板为空（先在选择模式下框选内容）")
 	else:
-		print("[TileMason] 已复制 %d 件物件" % _clipboard.size())
+		print("[TileMason] 已复制 %d 件物件、%d 格" % [_clipboard.size(), _clip_cells.size()])
 
-## 粘贴到鼠标位置：整组保持相对布局、首件对齐鼠标格（§7 复制后自动吸附网格）
+## 粘贴到鼠标位置：整组保持相对布局、左上角对齐鼠标格（§7 复制后自动吸附网格）
 func _paste_clipboard() -> void:
-	if _clipboard.is_empty():
-		print("[TileMason] 剪贴板为空（Ctrl+C 复制选中物件）")
+	if _clipboard.is_empty() and _clip_cells.is_empty():
+		print("[TileMason] 剪贴板为空（Ctrl+C 复制选中内容）")
 		return
 	var base := Vector2i(99999, 99999)
 	for snap in _clipboard:
 		var c: Vector2i = (snap as Dictionary)["cell"]
 		base = Vector2i(mini(base.x, c.x), mini(base.y, c.y))
+	for e in _clip_cells:
+		var c2: Vector2i = (e as Dictionary)["cell"]
+		base = Vector2i(mini(base.x, c2.x), mini(base.y, c2.y))
 	var delta := mouse_cell() - base
 	var ctx := {}
 	var do_paste := func() -> void:
@@ -467,7 +477,33 @@ func _paste_clipboard() -> void:
 	var undo_paste := func() -> void:
 		for o in ctx["objs"]:
 			_document.remove_object(int((o as Dictionary)["id"]), true)
-	_commands.push("粘贴 %d 件" % _clipboard.size(), do_paste, undo_paste)
+	# 方块：非强制写入（锁定层跳过），整段并入同一命令
+	var cell_entries := []
+	for e in _clip_cells:
+		var ce: Dictionary = e
+		var target := (ce["cell"] as Vector2i) + delta
+		var old: Variant = _document.set_tile(str(ce["layer"]), target, str(ce["asset_id"]))
+		if old != null:
+			cell_entries.append({"layer": str(ce["layer"]), "cell": target, "old": old, "asset_id": str(ce["asset_id"])})
+	var do_cells := func() -> void:
+		for ce in cell_entries:
+			var c: Dictionary = ce
+			_document.set_tile(str(c["layer"]), c["cell"], str(c["asset_id"]), true)
+	var undo_cells := func() -> void:
+		for i in range(cell_entries.size() - 1, -1, -1):
+			var ce: Dictionary = cell_entries[i]
+			var prev: Dictionary = ce["old"]
+			if prev.is_empty():
+				_document.erase_tile(str(ce["layer"]), ce["cell"], true)
+			else:
+				_document.set_tile(str(ce["layer"]), ce["cell"], str(prev["asset_id"]), true)
+	var do_all := func() -> void:
+		do_paste.call()
+		do_cells.call()
+	var undo_all := func() -> void:
+		undo_cells.call()
+		undo_paste.call()
+	_commands.push("粘贴 %d 件 %d 格" % [_clipboard.size(), cell_entries.size()], do_all, undo_all)
 	# 粘贴后选中新物件，便于连续移动
 	var pasted: Array = ctx.get("objs", [])
 	if not pasted.is_empty():
