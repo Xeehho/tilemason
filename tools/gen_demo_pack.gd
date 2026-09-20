@@ -26,6 +26,12 @@ const DOOR := Color("5a3a1e")
 const WINDOW := Color("8fb8d9")
 const AWNING_A := Color("c94f4f")
 const AWNING_B := Color("f0f0e8")
+const WALL_BASE := Color("76766e")
+const WALL_DARK := Color("66665f")
+const WALL_LIGHT := Color("8a8a80")
+const MORTAR := Color("4a4a45")
+const STALL_GOODS_A := Color("c9b458")
+const STALL_GOODS_B := Color("8fb8d9")
 
 func _init() -> void:
 	_prepare_dirs()
@@ -33,12 +39,16 @@ func _init() -> void:
 	_gen_tile("tiles/dirt.png", _paint_dirt)
 	_gen_tile("tiles/road_h.png", _paint_road_h)
 	_gen_tile("tiles/road_corner.png", _paint_road_corner)
+	_gen_tile("tiles/wall_brick.png", _paint_wall_brick)
+	_gen_tile("tiles/wall_gate.png", _paint_wall_gate)
 	_gen_prop("props/tree_small.png", _paint_tree_small)
 	_gen_prop("props/tree_big.png", _paint_tree_big)
 	_gen_prop("props/house.png", _paint_house)
 	_gen_prop("props/house_shop.png", _paint_house_shop)
+	_gen_prop("props/stall_red.png", _paint_stall.bind(AWNING_A, STALL_GOODS_A))
+	_gen_prop("props/stall_green.png", _paint_stall.bind(Color("4f9a3a"), STALL_GOODS_B))
 	_write_manifest()
-	print("[TileMason] demo 素材包生成完毕：%s（8 件）" % ProjectSettings.globalize_path(OUT_DIR))
+	print("[TileMason] demo 素材包生成完毕：%s（12 件）" % ProjectSettings.globalize_path(OUT_DIR))
 	quit(0)
 
 func _prepare_dirs() -> void:
@@ -149,6 +159,38 @@ func _paint_house_shop(img: Image) -> void:
 	_rect(img, 24, 24, 12, 6, Color("3d3d3d")) # 招牌占位
 	_rect(img, 26, 26, 8, 2, Color("f0d060"))
 
+# ---- 墙与摊位（demo 扩充：12 件）----
+
+func _paint_wall_brick(img: Image) -> void:
+	for y in 16:
+		for x in 16:
+			_speckle(img, x, y, WALL_BASE, WALL_DARK, WALL_LIGHT)
+	for y in range(0, 16, 4): # 水平砖缝
+		for x in 16:
+			img.set_pixel(x, y, MORTAR)
+	for row in 4: # 垂直砖缝（逐行错缝）
+		var joints := [8] if row % 2 == 0 else [4, 12]
+		for jx in joints:
+			for y in range(row * 4 + 1, row * 4 + 4):
+				img.set_pixel(jx, y, MORTAR)
+
+func _paint_wall_gate(img: Image) -> void:
+	_paint_wall_brick(img)
+	_rect(img, 4, 8, 8, 8, DOOR) # 门洞占下半（P2 自动连接按整墙处理）
+
+## 摊位绘制（雨棚主色 + 货品色经 bind 传入；支柱/柜台共用）
+func _paint_stall(img: Image, canopy: Color, goods: Color) -> void:
+	_rect(img, 6, 8, 3, 40, TRUNK) # 支柱
+	_rect(img, 39, 8, 3, 40, TRUNK)
+	_rect(img, 4, 30, 40, 18, Color("8a6b47")) # 柜台
+	_rect(img, 4, 30, 40, 3, Color("a08a6a")) # 台面
+	for x in range(2, 46, 6): # 雨棚条纹
+		_rect(img, x, 4, 6, 10, canopy if ((x - 2) / 6) % 2 == 0 else AWNING_B)
+	_rect(img, 2, 14, 44, 2, Color("3d3d3d")) # 棚檐
+	_rect(img, 12, 26, 5, 4, goods) # 货品
+	_rect(img, 22, 26, 5, 4, goods)
+	_rect(img, 32, 26, 5, 4, goods)
+
 func _write_manifest() -> void:
 	var manifest := {
 		"name": "演示素材包",
@@ -157,10 +199,14 @@ func _write_manifest() -> void:
 			{"file": "tiles/dirt.png", "name": "泥土", "category": "ground"},
 			{"file": "tiles/road_h.png", "name": "道路·直", "category": "road", "connections": ["left", "right"]},
 			{"file": "tiles/road_corner.png", "name": "道路·弯", "category": "road", "connections": ["right", "down"]},
+			{"file": "tiles/wall_brick.png", "name": "砖墙", "category": "wall", "connections": ["left", "right"]},
+			{"file": "tiles/wall_gate.png", "name": "墙·门洞", "category": "wall", "connections": ["left", "right"]},
 			{"file": "props/tree_small.png", "name": "小树", "category": "tree"},
 			{"file": "props/tree_big.png", "name": "大树", "category": "tree"},
 			{"file": "props/house.png", "name": "民居", "category": "building"},
 			{"file": "props/house_shop.png", "name": "店铺", "category": "building"},
+			{"file": "props/stall_red.png", "name": "摊位·食", "category": "stall"},
+			{"file": "props/stall_green.png", "name": "摊位·杂", "category": "stall"},
 		],
 	}
 	var f := FileAccess.open(OUT_DIR + "/pack.json", FileAccess.WRITE)

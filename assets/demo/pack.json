@@ -29,6 +29,24 @@
 			"name": "道路·弯"
 		},
 		{
+			"category": "wall",
+			"connections": [
+				"left",
+				"right"
+			],
+			"file": "tiles/wall_brick.png",
+			"name": "砖墙"
+		},
+		{
+			"category": "wall",
+			"connections": [
+				"left",
+				"right"
+			],
+			"file": "tiles/wall_gate.png",
+			"name": "墙·门洞"
+		},
+		{
 			"category": "tree",
 			"file": "props/tree_small.png",
 			"name": "小树"
@@ -47,6 +65,16 @@
 			"category": "building",
 			"file": "props/house_shop.png",
 			"name": "店铺"
+		},
+		{
+			"category": "stall",
+			"file": "props/stall_red.png",
+			"name": "摊位·食"
+		},
+		{
+			"category": "stall",
+			"file": "props/stall_green.png",
+			"name": "摊位·杂"
 		}
 	],
 	"name": "演示素材包"
