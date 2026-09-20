@@ -38,6 +38,10 @@ var _marquee_start := Vector2i.ZERO
 var _moving := false ## 选中物件拖动进行中
 var _move_start_px := Vector2.ZERO
 var _clipboard: Array = [] ## 复制的物件快照（design.md §7 复制粘贴）
+var _line_mode := false ## L 键直线工具（design.md §2.2）
+var _line_armed := false ## 已定起点，等待终点
+var _line_start := Vector2i.ZERO
+var _line_sprites: Array = [] ## 直线预览 Sprite 池
 
 func _ready() -> void:
 	var camera := EditorCamera.new()
@@ -108,7 +112,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			if mb.pressed:
-				if _select_mode:
+				if _line_mode:
+					_line_click(mouse_cell())
+				elif _select_mode:
 					_begin_select_action()
 				elif mb.ctrl_pressed:
 					_begin_rect() # Ctrl+左键：矩形填充拖框
@@ -136,6 +142,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_update_marquee_preview(mouse_cell())
 	elif event is InputEventMouseMotion and _moving:
 		_view.drag_object_sprites(_selection.object_ids(), get_global_mouse_position() - _move_start_px)
+	elif event is InputEventMouseMotion and _line_armed:
+		_rebuild_line_preview(mouse_cell())
 	elif event is InputEventKey and event.pressed and not event.echo:
 		var key := event as InputEventKey
 		if key.ctrl_pressed and key.keycode == KEY_Z:
@@ -150,8 +158,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			_toggle_eraser()
 		elif key.keycode == KEY_S and not key.ctrl_pressed:
 			_toggle_select_mode()
+		elif key.keycode == KEY_L and not key.ctrl_pressed:
+			_toggle_line_mode()
 		elif key.keycode == KEY_ESCAPE:
 			_exit_select_mode()
+			_exit_line_mode()
 		elif key.ctrl_pressed and key.keycode == KEY_C:
 			_copy_selected()
 		elif key.ctrl_pressed and key.keycode == KEY_V:
@@ -429,6 +440,92 @@ func _delete_selected() -> void:
 			_document.insert_object(snap as Dictionary, true)
 	_commands.push("删除 %d 件" % snapshots.size(), do_del, undo_del)
 	_apply_selection([])
+
+## ---- 直线工具（design.md §2.2：两点画线，整段单命令）----
+
+func _toggle_line_mode() -> void:
+	if _line_mode:
+		_exit_line_mode()
+		return
+	if _selected_asset_id.is_empty() or not AssetLibrary.TILE_CATEGORIES.has(str(_library.get_asset(_selected_asset_id).get("category", ""))):
+		print("[TileMason] 直线工具需要先选中规则方块类素材")
+		return
+	_line_mode = true
+	_line_armed = false
+	print("[TileMason] 直线工具：点起点，再点终点画线（L/Esc 退出）")
+
+func _exit_line_mode() -> void:
+	if not _line_mode:
+		return
+	_line_mode = false
+	_line_armed = false
+	_clear_line_preview()
+	print("[TileMason] 直线工具关闭")
+
+func _line_click(cell: Vector2i) -> void:
+	if _mouse_over_panel():
+		return
+	if not _line_armed:
+		_line_armed = true
+		_line_start = cell
+		_rebuild_line_preview(cell)
+		return
+	# 第二击：落线
+	var asset := _library.get_asset(_selected_asset_id)
+	if asset.is_empty():
+		_exit_line_mode()
+		return
+	var layer_id: String = CATEGORY_TO_LAYER.get(str(asset["category"]), "ground")
+	var entries := []
+	for c in MapDocument.line_cells(_line_start, cell):
+		var prev: Variant = _document.set_tile(layer_id, c, str(asset["id"]))
+		if prev != null:
+			entries.append({"cell": c, "old": prev})
+	_line_armed = false
+	_clear_line_preview()
+	if entries.is_empty():
+		return
+	var do_line := func() -> void:
+		for e in entries:
+			_document.set_tile(layer_id, (e as Dictionary)["cell"], str(asset["id"]), true)
+	var undo_line := func() -> void:
+		for i in range(entries.size() - 1, -1, -1):
+			var e: Dictionary = entries[i]
+			var prev_cell: Dictionary = e["old"]
+			if prev_cell.is_empty():
+				_document.erase_tile(layer_id, e["cell"], true)
+			else:
+				_document.set_tile(layer_id, e["cell"], str(prev_cell["asset_id"]), true)
+	_commands.push("直线 %d 格" % entries.size(), do_line, undo_line)
+
+## 直线预览：沿线格铺半透明 Sprite（35% 透明度）
+func _rebuild_line_preview(to_cell: Vector2i) -> void:
+	_clear_line_preview()
+	if _selected_asset_id.is_empty():
+		return
+	var tex := _library.load_texture(_selected_asset_id)
+	if tex == null:
+		return
+	var asset := _library.get_asset(_selected_asset_id)
+	var layer_id: String = CATEGORY_TO_LAYER.get(str(asset.get("category", "")), "ground")
+	if _document.is_layer_locked(layer_id):
+		return
+	for c in MapDocument.line_cells(_line_start, to_cell):
+		if _line_sprites.size() >= 512: # 超长线保护
+			break
+		var s := Sprite2D.new()
+		s.texture = tex
+		s.centered = false
+		s.modulate.a = 0.35
+		s.position = Vector2(c) * DEFAULT_GRID
+		s.z_index = 60
+		add_child(s)
+		_line_sprites.append(s)
+
+func _clear_line_preview() -> void:
+	for s in _line_sprites:
+		(s as Node2D).queue_free()
+	_line_sprites.clear()
 
 func _toggle_eraser() -> void:
 	_eraser_mode = not _eraser_mode

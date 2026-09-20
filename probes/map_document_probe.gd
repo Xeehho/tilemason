@@ -14,6 +14,7 @@ func _init() -> void:
 	_test_layer_lock()
 	_test_objects()
 	_test_fill_rect()
+	_test_line_cells()
 	_test_command_stack()
 	_test_undo_with_document()
 	_test_serialization()
@@ -105,6 +106,15 @@ func _test_fill_rect() -> void:
 	doc.set_layer_property("ground", "locked", true)
 	_check(doc.fill_rect("ground", Rect2i(Vector2i(9, 9), Vector2i.ONE), "x").is_empty(), "锁定层拒绝矩形填充")
 	doc.set_layer_property("ground", "locked", false)
+
+func _test_line_cells() -> void:
+	var h: Array = MapDocument.line_cells(Vector2i(0, 0), Vector2i(3, 0))
+	_check(h.size() == 4 and h[0] == Vector2i(0, 0) and h[3] == Vector2i(3, 0), "水平线 4 格含起终点")
+	var v: Array = MapDocument.line_cells(Vector2i(2, 5), Vector2i(2, 3))
+	_check(v.size() == 3 and v[0] == Vector2i(2, 5) and v[2] == Vector2i(2, 3), "反向垂直线 3 格")
+	var d: Array = MapDocument.line_cells(Vector2i(0, 0), Vector2i(2, 2))
+	_check(d.size() == 3 and d[1] == Vector2i(1, 1), "对角线走主对角格")
+	_check(MapDocument.line_cells(Vector2i(4, 4), Vector2i(4, 4)).size() == 1, "同点单格")
 
 func _test_command_stack() -> void:
 	var stack := CommandStack.new()

@@ -146,6 +146,29 @@ func fill_rect(layer_id: String, rect: Rect2i, asset_id: String, skip_existing :
 				entries.append({"cell": cell, "old": prev})
 	return entries
 
+## 两点间的格序列（Bresenham 直线，design.md §2.2 直线工具），含起终点
+static func line_cells(from: Vector2i, to: Vector2i) -> Array:
+	var cells := []
+	var x := from.x
+	var y := from.y
+	var dx := absi(to.x - from.x)
+	var dy := -absi(to.y - from.y)
+	var sx := 1 if from.x < to.x else -1
+	var sy := 1 if from.y < to.y else -1
+	var err := dx + dy
+	while true:
+		cells.append(Vector2i(x, y))
+		if x == to.x and y == to.y:
+			break
+		var e2 := 2 * err
+		if e2 >= dy:
+			err += dy
+			x += sx
+		if e2 <= dx:
+			err += dx
+			y += sy
+	return cells
+
 func get_tile(layer_id: String, coords: Vector2i) -> Dictionary:
 	if not _tiles.has(layer_id):
 		return {}
