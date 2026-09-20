@@ -17,3 +17,6 @@ desktop.ini
 # 素材包不入库（版权各自保留），目录内说明文件除外
 /assets/packs/*
 !/assets/packs/README.md
+
+# 本地 AI 会话工作区（规则/交接/日志，主项目同款纪律）
+.zcode/
