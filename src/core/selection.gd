@@ -55,6 +55,13 @@ func set_objects(ids: Array) -> void:
 func has_cell(layer_id: String, cell: Vector2i) -> bool:
 	return _cells.has(layer_id) and (_cells[layer_id] as Dictionary).has(cell)
 
+## 各层选中格 {layer_id: [Vector2i]}（视图高亮与删除遍历用）
+func cells_by_layer() -> Dictionary:
+	var result := {}
+	for key in _cells.keys():
+		result[key] = (_cells[key] as Dictionary).keys()
+	return result
+
 func add_cell(layer_id: String, cell: Vector2i) -> void:
 	if not _cells.has(layer_id):
 		_cells[layer_id] = {}

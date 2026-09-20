@@ -178,6 +178,14 @@ func _test_selection(doc: MapDocument, view: MapView) -> void:
 	var anchor := Vector2(float(tl3.x) * 16 + cells3.x * 8.0, float(tl3.y) * 16 + cells3.y * 16.0)
 	_check(anchor == Vector2(5 * 16 + 8, 5 * 16 + 16), "底边中心锚=鼠标格中心与下缘")
 
+	# 格框选：矩形内非空格按层收集
+	doc.set_tile("ground", Vector2i(30, 10), "probe_mv/tiles/tile.png")
+	doc.set_tile("ground", Vector2i(31, 10), "probe_mv/tiles/tile.png")
+	doc.set_tile("terrain", Vector2i(30, 11), "probe_mv/tiles/tile.png")
+	var picked := view.tiles_in_rect(Rect2i(Vector2i(30, 10), Vector2i(2, 2)))
+	_check((picked.get("ground", []) as Array).size() == 2 and (picked.get("terrain", []) as Array).size() == 1, "格框选按层收集非空格")
+	_check((view.tiles_in_rect(Rect2i(Vector2i(50, 50), Vector2i.ONE)) as Dictionary).is_empty(), "空区格框选返回空")
+
 	# 选区模型
 	var sel := Selection.new()
 	sel.add_object(1)

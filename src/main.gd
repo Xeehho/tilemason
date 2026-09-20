@@ -378,7 +378,7 @@ func _end_select_action() -> void:
 			var hits := _view.objects_in_rect(Rect2i(cell, Vector2i.ONE))
 			_apply_selection(hits if not hits.is_empty() else [])
 		else:
-			_apply_selection(_view.objects_in_rect(rect))
+			_apply_selection(_view.objects_in_rect(rect), _view.tiles_in_rect(rect))
 	elif _moving:
 		_moving = false
 		var delta_cell := Vector2i(((get_global_mouse_position() - _move_start_px) / float(DEFAULT_GRID)).round())
@@ -387,14 +387,25 @@ func _end_select_action() -> void:
 			return
 		_commit_move(delta_cell)
 
-func _apply_selection(ids: Array) -> void:
-	_view.set_objects_tinted(_selection.object_ids(), false)
+func _apply_selection(ids: Array, cells := {}) -> void:
+	_clear_selection_tints()
 	_selection.set_objects(ids)
+	for layer_id in (cells as Dictionary).keys():
+		for c in (cells as Dictionary)[str(layer_id)]:
+			_selection.add_cell(str(layer_id), c as Vector2i)
 	_view.set_objects_tinted(ids, true)
-	if ids.is_empty():
+	for layer_id in _selection.cells_by_layer().keys():
+		_view.set_cells_tinted(str(layer_id), _selection.cells_by_layer()[str(layer_id)], true)
+	if _selection.is_empty():
 		print("[TileMason] 取消选择")
 	else:
-		print("[TileMason] 选中 %d 件物件" % ids.size())
+		print("[TileMason] 选中 %d 件物件、%d 格" % [_selection.object_count(), _selection.cell_count()])
+
+## 清掉当前选区在视图上的全部高亮（物件 + 格）
+func _clear_selection_tints() -> void:
+	_view.set_objects_tinted(_selection.object_ids(), false)
+	for layer_id in _selection.cells_by_layer().keys():
+		_view.set_cells_tinted(str(layer_id), _selection.cells_by_layer()[str(layer_id)], false)
 
 ## 拖动提交：整体位移一格增量，单命令可撤销（design.md §7 多选移动）
 func _commit_move(delta_cell: Vector2i) -> void:
@@ -467,25 +478,40 @@ func _paste_clipboard() -> void:
 			_toggle_select_mode()
 		_apply_selection(new_ids)
 
-## 删除选中物件（单命令可撤销）
+## 删除选中内容（物件+格，单命令可撤销；锁定层内容拒绝删除——修复此前 force 旁路锁定）
 func _delete_selected() -> void:
 	if _selection.is_empty():
 		return
 	var snapshots := []
 	for id in _selection.object_ids():
-		var obj := _document.get_object(int(id))
-		if not obj.is_empty():
-			snapshots.append(obj.duplicate(true))
-	if snapshots.is_empty():
+		var removed: Variant = _document.remove_object(int(id)) # 非强制：锁定层拒删
+		if removed is Dictionary and not (removed as Dictionary).is_empty():
+			snapshots.append(removed)
+	var cell_entries := []
+	for layer_id in _selection.cells_by_layer().keys():
+		for c in _selection.cells_by_layer()[str(layer_id)]:
+			var old: Variant = _document.erase_tile(str(layer_id), c as Vector2i) # 非强制
+			if old != null:
+				cell_entries.append({"layer": str(layer_id), "cell": c, "old": old})
+	if snapshots.is_empty() and cell_entries.is_empty():
 		return
-	var ids := _selection.object_ids().duplicate()
+	var ids := []
+	for snap in snapshots:
+		ids.append(int((snap as Dictionary)["id"]))
 	var do_del := func() -> void:
 		for id in ids:
 			_document.remove_object(int(id), true)
+		for e in cell_entries:
+			_document.erase_tile(str((e as Dictionary)["layer"]), (e as Dictionary)["cell"] as Vector2i, true)
 	var undo_del := func() -> void:
 		for snap in snapshots:
 			_document.insert_object(snap as Dictionary, true)
-	_commands.push("删除 %d 件" % snapshots.size(), do_del, undo_del)
+		for i in range(cell_entries.size() - 1, -1, -1):
+			var e: Dictionary = cell_entries[i]
+			var prev: Dictionary = e["old"]
+			if not prev.is_empty():
+				_document.set_tile(str(e["layer"]), e["cell"] as Vector2i, str(prev["asset_id"]), true)
+	_commands.push("删除 %d 件 %d 格" % [snapshots.size(), cell_entries.size()], do_del, undo_del)
 	_apply_selection([])
 
 ## ---- 直线工具（design.md §2.2：两点画线，整段单命令）----

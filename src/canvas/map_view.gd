@@ -110,14 +110,48 @@ func objects_in_rect(rect: Rect2i) -> Array:
 			result.append(int(o["id"]))
 	return result
 
+## 框选：矩形内全部非空方块格 {layer_id: [Vector2i]}（格选区，design.md §7）
+func tiles_in_rect(rect: Rect2i) -> Dictionary:
+	var result := {}
+	for layer in document.get_layers():
+		var layer_id := str((layer as Dictionary)["id"])
+		if str((layer as Dictionary)["type"]) != "tile":
+			continue
+		for coords in document.get_tile_coords(layer_id):
+			var c := coords as Vector2i
+			if rect.has_point(c):
+				if not result.has(layer_id):
+					result[layer_id] = []
+				(result[layer_id] as Array).append(c)
+	return result
+
+## 格选区高亮（与物件高亮同色调）；关闭时恢复图层透明度
+func set_cells_tinted(layer_id: String, cells: Array, on: bool) -> void:
+	var alpha := float(document.get_layer(layer_id).get("opacity", 1.0))
+	for c in cells:
+		var s := _tile_sprites.get("%s|%d,%d" % [layer_id, (c as Vector2i).x, (c as Vector2i).y]) as Sprite2D
+		if s != null:
+			s.modulate = Color(1.0, 0.85, 0.4) if on else Color(1, 1, 1, alpha)
+
+## 物件所在图层 id（无返回空串）
+func _document_layer_of_object(object_id: int) -> String:
+	var obj := document.get_object(object_id)
+	if obj.is_empty():
+		return ""
+	return str(obj["layer"])
+
 ## ---- 选择模式视觉支持 ----
 
-## 选中高亮（黄色调，与半透明预览区分）
+## 选中高亮（黄色调，与半透明预览区分）；关闭时恢复图层透明度而非纯白
 func set_objects_tinted(object_ids: Array, on: bool) -> void:
 	for id in object_ids:
 		var s := _object_sprites.get(int(id)) as Sprite2D
 		if s != null:
-			s.modulate = Color(1.0, 0.85, 0.4) if on else Color.WHITE
+			if on:
+				s.modulate = Color(1.0, 0.85, 0.4)
+			else:
+				var layer_id := str(_document_layer_of_object(int(id)))
+				s.modulate = Color(1, 1, 1, float(document.get_layer(layer_id).get("opacity", 1.0)))
 
 ## 拖动预览：记录基准位置（只动 Sprite 不动文档）
 func begin_object_drag(object_ids: Array) -> void:
