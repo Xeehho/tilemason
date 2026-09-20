@@ -1,0 +1,129 @@
+class_name AssetPanel
+extends PanelContainer
+## 素材面板（design.md §6.1 最小版）：左分类列表 + 右缩略图网格
+## 像素纪律：缩略图整数倍放大 + 最近邻重采样，不做任意拉伸
+## 全部节点代码动态创建（.tscn 精简纪律）
+
+signal asset_selected(asset_id: String)
+
+const THUMB_BOX := 64 ## 缩略图最大边（px）：16px→4x=64、48px→1x=48，均为整数倍
+const PANEL_WIDTH := 380
+
+## 分类显示名（design.md §6.1）
+const CATEGORY_NAMES := {
+	"ground": "地面", "road": "道路", "wall": "墙体", "building": "建筑",
+	"tree": "树木", "stall": "摊位", "indoor": "室内", "furniture": "家具", "deco": "装饰",
+}
+
+var _library: AssetLibrary
+var _category_list: ItemList
+var _grid: GridContainer
+var _empty_hint: Label
+var _selected: TextureButton
+var _thumbs := {} # asset_id -> ImageTexture（整数倍缩放后的缩略图）
+
+func setup(library: AssetLibrary) -> void:
+	_library = library
+	custom_minimum_size = Vector2(PANEL_WIDTH, 0)
+	_build_ui()
+	_populate_categories()
+
+func _build_ui() -> void:
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 8)
+	margin.add_theme_constant_override("margin_right", 8)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_bottom", 8)
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(margin)
+
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 8)
+	hbox.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.add_child(hbox)
+
+	_category_list = ItemList.new()
+	_category_list.custom_minimum_size = Vector2(96, 0)
+	_category_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_category_list.item_selected.connect(_on_category_selected)
+	hbox.add_child(_category_list)
+
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	hbox.add_child(scroll)
+
+	var box := VBoxContainer.new()
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_theme_constant_override("separation", 4)
+	scroll.add_child(box)
+
+	_grid = GridContainer.new()
+	_grid.columns = 3
+	_grid.add_theme_constant_override("h_separation", 6)
+	_grid.add_theme_constant_override("v_separation", 6)
+	box.add_child(_grid)
+
+	_empty_hint = Label.new()
+	_empty_hint.text = "此分类暂无素材"
+	_empty_hint.modulate.a = 0.6
+	_empty_hint.visible = false
+	box.add_child(_empty_hint)
+
+func _populate_categories() -> void:
+	var categories: Array = _library.get_categories() if _library != null else []
+	if categories.is_empty():
+		_empty_hint.text = "未找到素材包\n可将自己的素材包放入\nassets/packs/ 目录"
+		_empty_hint.visible = true
+		return
+	for i in categories.size():
+		var category := str(categories[i])
+		var display: String = CATEGORY_NAMES.get(category, category)
+		_category_list.add_item(display)
+		_category_list.set_item_metadata(i, category)
+	_category_list.select(0)
+	_category_list.item_selected.emit(0) # 默认展开第一个分类
+
+func _on_category_selected(index: int) -> void:
+	if _selected != null:
+		_selected.modulate = Color.WHITE
+		_selected = null
+	for child in _grid.get_children():
+		child.queue_free()
+	var category := str(_category_list.get_item_metadata(index))
+	var assets: Array = _library.get_assets_by_category(category)
+	_empty_hint.visible = assets.is_empty()
+	for asset in assets:
+		_grid.add_child(_make_thumb_button(asset as Dictionary))
+
+func _make_thumb_button(asset: Dictionary) -> TextureButton:
+	var asset_id := str(asset["id"])
+	var btn := TextureButton.new()
+	btn.texture_normal = _get_thumb(asset_id)
+	btn.tooltip_text = "%s\n占格 %d×%d" % [str(asset["name"]), (asset["cells"] as Vector2i).x, (asset["cells"] as Vector2i).y]
+	btn.pressed.connect(_on_thumb_pressed.bind(btn, asset_id))
+	return btn
+
+func _on_thumb_pressed(btn: TextureButton, asset_id: String) -> void:
+	if _selected != null:
+		_selected.modulate = Color.WHITE
+	_selected = btn
+	btn.modulate = Color(1.0, 0.9, 0.5) # 选中高亮
+	asset_selected.emit(asset_id)
+
+## 整数倍缩放缩略图（最近邻）：16px→4x、48px→1x，不产生非整数拉伸
+func _get_thumb(asset_id: String) -> ImageTexture:
+	if _thumbs.has(asset_id):
+		return _thumbs[asset_id]
+	var img := _library.load_image(asset_id)
+	if img == null:
+		return ImageTexture.new()
+	var scale := maxi(1, THUMB_BOX / maxi(img.get_width(), img.get_height()))
+	var thumb := img
+	if scale > 1:
+		thumb = img.duplicate()
+		thumb.resize(img.get_width() * scale, img.get_height() * scale, Image.INTERPOLATE_NEAREST)
+	var tex := ImageTexture.create_from_image(thumb)
+	_thumbs[asset_id] = tex
+	return tex
