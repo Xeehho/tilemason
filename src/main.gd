@@ -37,6 +37,7 @@ var _marqueeing := false ## 框选拖动进行中
 var _marquee_start := Vector2i.ZERO
 var _moving := false ## 选中物件拖动进行中
 var _move_start_px := Vector2.ZERO
+var _clipboard: Array = [] ## 复制的物件快照（design.md §7 复制粘贴）
 
 func _ready() -> void:
 	var camera := EditorCamera.new()
@@ -151,6 +152,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			_toggle_select_mode()
 		elif key.keycode == KEY_ESCAPE:
 			_exit_select_mode()
+		elif key.ctrl_pressed and key.keycode == KEY_C:
+			_copy_selected()
+		elif key.ctrl_pressed and key.keycode == KEY_V:
+			_paste_clipboard()
+		elif key.keycode == KEY_DELETE:
+			_delete_selected()
 		elif key.keycode == KEY_F9:
 			_run_map_check()
 
@@ -350,6 +357,78 @@ func _commit_move(delta_cell: Vector2i) -> void:
 		for e in entries:
 			_document.update_object(int((e as Dictionary)["id"]), {"cell": (e as Dictionary)["from"]}, true)
 	_commands.push("移动 %d 件 %s" % [entries.size(), str(delta_cell)], do_move, undo_move)
+
+## 复制选中物件（快照入剪贴板）
+func _copy_selected() -> void:
+	_clipboard.clear()
+	for id in _selection.object_ids():
+		var obj := _document.get_object(int(id))
+		if not obj.is_empty():
+			_clipboard.append(obj.duplicate(true))
+	if _clipboard.is_empty():
+		print("[TileMason] 剪贴板为空（先在选择模式下选中物件）")
+	else:
+		print("[TileMason] 已复制 %d 件物件" % _clipboard.size())
+
+## 粘贴到鼠标位置：整组保持相对布局、首件对齐鼠标格（§7 复制后自动吸附网格）
+func _paste_clipboard() -> void:
+	if _clipboard.is_empty():
+		print("[TileMason] 剪贴板为空（Ctrl+C 复制选中物件）")
+		return
+	var base := Vector2i(99999, 99999)
+	for snap in _clipboard:
+		var c: Vector2i = (snap as Dictionary)["cell"]
+		base = Vector2i(mini(base.x, c.x), mini(base.y, c.y))
+	var delta := mouse_cell() - base
+	var ctx := {}
+	var do_paste := func() -> void:
+		if not ctx.has("objs"):
+			var created: Array = []
+			for snap in _clipboard:
+				var props := (snap as Dictionary).duplicate()
+				props.erase("id")
+				props["cell"] = (props["cell"] as Vector2i) + delta
+				var new_id := _document.add_object(props)
+				if new_id > 0:
+					created.append(_document.get_object(new_id).duplicate(true))
+			ctx["objs"] = created
+		else:
+			for o in ctx["objs"]:
+				_document.insert_object(o as Dictionary, true) # 重做按原 id 复原
+	var undo_paste := func() -> void:
+		for o in ctx["objs"]:
+			_document.remove_object(int((o as Dictionary)["id"]), true)
+	_commands.push("粘贴 %d 件" % _clipboard.size(), do_paste, undo_paste)
+	# 粘贴后选中新物件，便于连续移动
+	var pasted: Array = ctx.get("objs", [])
+	if not pasted.is_empty():
+		var new_ids := []
+		for o in pasted:
+			new_ids.append(int((o as Dictionary)["id"]))
+		if not _select_mode:
+			_toggle_select_mode()
+		_apply_selection(new_ids)
+
+## 删除选中物件（单命令可撤销）
+func _delete_selected() -> void:
+	if _selection.is_empty():
+		return
+	var snapshots := []
+	for id in _selection.object_ids():
+		var obj := _document.get_object(int(id))
+		if not obj.is_empty():
+			snapshots.append(obj.duplicate(true))
+	if snapshots.is_empty():
+		return
+	var ids := _selection.object_ids().duplicate()
+	var do_del := func() -> void:
+		for id in ids:
+			_document.remove_object(int(id), true)
+	var undo_del := func() -> void:
+		for snap in snapshots:
+			_document.insert_object(snap as Dictionary, true)
+	_commands.push("删除 %d 件" % snapshots.size(), do_del, undo_del)
+	_apply_selection([])
 
 func _toggle_eraser() -> void:
 	_eraser_mode = not _eraser_mode
