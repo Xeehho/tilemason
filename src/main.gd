@@ -624,6 +624,9 @@ func _begin_paint() -> void:
 		return
 	var cell := mouse_cell()
 	if AssetLibrary.TILE_CATEGORIES.has(str(asset["category"])):
+		if Input.is_key_pressed(KEY_SHIFT):
+			_place_asset(asset, cell) # Shift：临时单块放置，不进入拖刷笔画（design.md §6.3）
+			return
 		# 方块笔画：按下起笔、拖动连刷、抬手合成一个命令（区域操作整段撤销的地基）
 		var layer_id: String = CATEGORY_TO_LAYER.get(str(asset["category"]), "ground")
 		if _document.is_layer_locked(layer_id):
