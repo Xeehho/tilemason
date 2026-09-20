@@ -4,7 +4,9 @@ extends Node2D
 
 const DEFAULT_GRID := 16 ## 默认正式网格（px）
 const MAP_PATH := "user://map.json" ## 默认存档槽（启动自动恢复用）
+const AUTOSAVE_PATH := "user://map.autosave.json" ## 自动保存档（手动档丢失时兜底恢复）
 var _current_map_path := MAP_PATH ## 当前编辑中的地图文件（打开/另存为切换，Ctrl+S 存这里）
+var _dirty := false ## 有未保存变更（命令栈活动即置位，自动保存成功复位）
 
 ## 素材分类 → 文档图层路由（P0 简化：wall 暂入基础地形层，图层系统扩展后细化）
 const CATEGORY_TO_LAYER := {
@@ -61,13 +63,18 @@ func _ready() -> void:
 	var asset_count := _library.scan(AssetLibrary.default_roots())
 	_build_asset_panel()
 
-	# 启动自动载入上次存档（验收 8：保存后重新打开仍可编辑）
+	# 启动自动恢复：手动档优先，手动档丢失时从自动保存档兜底（design.md §10 恢复上一版本最小版）
 	if FileAccess.file_exists(MAP_PATH):
 		_load_map(false)
+	elif FileAccess.file_exists(AUTOSAVE_PATH):
+		if _load_map_from(AUTOSAVE_PATH):
+			_current_map_path = MAP_PATH # 继续编辑仍指向手动档槽位
+			print("[TileMason] 手动档缺失，已从自动保存恢复")
 
 	_build_layer_panel()
 	_build_status_bar()
 	_connect_status_signals()
+	_setup_autosave()
 	refresh_status()
 
 	_preview = Sprite2D.new()
@@ -199,6 +206,7 @@ func _run_map_check() -> void:
 ## 保存当前地图到当前文件（design.md §10；另存为走 _save_as_dialog）
 func _save_map() -> void:
 	if _document.save_to_file(_current_map_path):
+		_dirty = false
 		var tiles := 0
 		for layer in _document.get_layers():
 			tiles += _document.get_tile_coords(str((layer as Dictionary)["id"])).size()
@@ -966,6 +974,22 @@ func refresh_status() -> void:
 func _connect_status_signals() -> void:
 	if not _document.layer_changed.is_connected(_on_doc_layer_changed):
 		_document.layer_changed.connect(_on_doc_layer_changed)
+
+## 自动保存：90 秒一跳，有未保存变更才写自动档（design.md §10）
+func _setup_autosave() -> void:
+	_commands.changed.connect(func(_u: bool, _r: bool) -> void: _dirty = true)
+	var timer := Timer.new()
+	timer.wait_time = 90.0
+	timer.autostart = true
+	timer.timeout.connect(_auto_save)
+	add_child(timer)
+
+func _auto_save() -> void:
+	if not _dirty:
+		return
+	if _document.save_to_file(AUTOSAVE_PATH):
+		_dirty = false
+		print("[TileMason] 自动保存：%s" % AUTOSAVE_PATH)
 
 func _on_doc_layer_changed(_layer_id: String, _key: String) -> void:
 	refresh_status()
