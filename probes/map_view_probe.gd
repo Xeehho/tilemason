@@ -93,6 +93,12 @@ func _test_pick(doc: MapDocument, view: MapView) -> void:
 	doc.remove_object(obj_id)
 	_check(view.pick_asset_id_at(Vector2i(1, 1)) == "probe_mv/tiles/tile.png", "物件删除后命中底层方块")
 	_check(view.pick_asset_id_at(Vector2i(9, 9)).is_empty(), "空格返回空串")
+	_check(view.pick_object_on_layer("deco", Vector2i(2, 2)) == -1, "物件已删：脚印格返回 -1")
+	# 橡皮擦物件拾取：两个物件脚印叠放时取后加入的
+	var id_a := doc.add_object({"asset_id": "probe_mv/props/prop.png", "layer": "deco", "cell": Vector2i(5, 5)})
+	var id_b := doc.add_object({"asset_id": "probe_mv/props/prop.png", "layer": "deco", "cell": Vector2i(5, 5)})
+	_check(view.pick_object_on_layer("deco", Vector2i(6, 6)) == id_b, "同层叠放取后加入的物件")
+	_check(view.pick_object_on_layer("building", Vector2i(6, 6)) == -1, "其他物件层不误伤")
 
 func _test_stroke(doc: MapDocument, view: MapView) -> void:
 	# 模拟拖刷 3 格 + 抬手合成一个命令：undo 一次整段回滚，redo 整段重放

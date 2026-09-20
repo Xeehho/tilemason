@@ -74,6 +74,18 @@ func pick_asset_id_at(cell: Vector2i) -> String:
 			return str(entry["asset_id"])
 	return ""
 
+## 取某物件层指定格脚印覆盖的物件 id（同层多个取后加入的；无返回 -1）——橡皮擦用
+func pick_object_on_layer(layer_id: String, cell: Vector2i) -> int:
+	var found := -1
+	for obj in document.get_objects_on_layer(layer_id):
+		var o := obj as Dictionary
+		var tl: Vector2i = o["cell"]
+		var asset := library.get_asset(str(o["asset_id"]))
+		var cells: Vector2i = Vector2i.ONE if asset.is_empty() else asset["cells"]
+		if cell.x >= tl.x and cell.y >= tl.y and cell.x < tl.x + cells.x and cell.y < tl.y + cells.y:
+			found = int(o["id"]) # 继续找，保留后加入的
+	return found
+
 ## ---- 内部：tile 渲染 ----
 
 func _tile_key(layer_id: String, coords: Vector2i) -> String:

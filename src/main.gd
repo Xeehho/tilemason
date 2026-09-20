@@ -23,6 +23,10 @@ var _stroke_cells: Array = [] ## 笔画格记录 [{cell, old}]，抬手合成一
 var _stroke_layer := ""
 var _stroke_asset_id := ""
 var _last_cell := Vector2i(99999, 99999) ## 笔画去重
+var _eraser_mode := false ## E 键切换：左键/拖动清除当前层（design.md §5）
+var _erasing := false ## 擦除笔画进行中
+var _erase_cells: Array = [] ## 擦除格记录 [{cell, old}]
+var _erase_layer := ""
 
 func _ready() -> void:
 	var camera := EditorCamera.new()
@@ -46,14 +50,14 @@ func _ready() -> void:
 	_preview.visible = false
 	add_child(_preview)
 
-	print("[TileMason] 编辑器骨架启动：grid=%dpx，文档 %d 层就绪，素材 %d 项；滚轮缩放，中键/空格+左键平移，面板选素材后左键放置" % [DEFAULT_GRID, _document.layer_count(), asset_count])
+	print("[TileMason] 编辑器骨架启动：grid=%dpx，文档 %d 层就绪，素材 %d 项；滚轮缩放，中键/空格+左键平移，面板选素材左键放置/拖刷，右键吸管，E 橡皮擦，Ctrl+Z/Y 撤销重做" % [DEFAULT_GRID, _document.layer_count(), asset_count])
 
 	if OS.get_cmdline_user_args().has("--screenshot"):
 		_capture_screenshot() # 无人值守视觉取证：摆样 + 延时截屏后退出
 
-## 半透明预览：跟随鼠标展示选中素材落点（面板区域内隐藏）
+## 半透明预览：跟随鼠标展示选中素材落点（面板区域内/橡皮擦模式下隐藏）
 func _process(_delta: float) -> void:
-	if _selected_asset_id.is_empty() or _panel == null or _mouse_over_panel():
+	if _eraser_mode or _selected_asset_id.is_empty() or _panel == null or _mouse_over_panel():
 		_preview.visible = false
 		return
 	var asset := _library.get_asset(_selected_asset_id)
@@ -83,19 +87,30 @@ func _unhandled_input(event: InputEvent) -> void:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			if mb.pressed:
-				_begin_paint()
+				if _eraser_mode:
+					_begin_erase()
+				else:
+					_begin_paint()
 			else:
 				_end_paint()
+				_end_erase()
 		elif mb.pressed and mb.button_index == MOUSE_BUTTON_RIGHT:
-			_pick_under_mouse()
-	elif _painting and event is InputEventMouseMotion:
+			if _eraser_mode:
+				_begin_erase() # 橡皮擦模式下右键同样清除（design.md §6.3）
+			else:
+				_pick_under_mouse()
+	elif event is InputEventMouseMotion and _painting:
 		_paint_to(mouse_cell())
+	elif event is InputEventMouseMotion and _erasing:
+		_erase_to(mouse_cell())
 	elif event is InputEventKey and event.pressed and not event.echo:
 		var key := event as InputEventKey
 		if key.ctrl_pressed and key.keycode == KEY_Z:
 			_do_undo()
 		elif key.ctrl_pressed and key.keycode == KEY_Y:
 			_do_redo()
+		elif key.keycode == KEY_E:
+			_toggle_eraser()
 
 ## Ctrl+Z / Ctrl+Y（design.md §6.3）
 func _do_undo() -> void:
@@ -109,6 +124,75 @@ func _do_redo() -> void:
 		print("[TileMason] 重做（剩余可重做 %d）" % _commands.redo_count())
 	else:
 		print("[TileMason] 没有可重做的操作")
+
+## ---- 橡皮擦（design.md §5：单格/笔刷，只清当前层）----
+
+func _toggle_eraser() -> void:
+	_eraser_mode = not _eraser_mode
+	print("[TileMason] 橡皮擦模式：%s" % ("开（左键/右键/拖动清除当前层，E 关闭）" if _eraser_mode else "关"))
+
+## 当前层：选中素材分类路由的图层；未选中默认地面层
+func _eraser_layer() -> String:
+	if not _selected_asset_id.is_empty():
+		var asset := _library.get_asset(_selected_asset_id)
+		if not asset.is_empty():
+			return CATEGORY_TO_LAYER.get(str(asset["category"]), "deco")
+	return "ground"
+
+func _begin_erase() -> void:
+	if _mouse_over_panel():
+		return
+	var layer := _eraser_layer()
+	if _document.is_layer_locked(layer):
+		print("[TileMason] 图层已锁定，无法擦除：%s" % layer)
+		return
+	if _document.get_layer(layer)["type"] == "object":
+		_erase_object_at(mouse_cell(), layer)
+		return
+	_erase_layer = layer
+	_erasing = true
+	_erase_cells = []
+	_erase_to(mouse_cell())
+
+func _erase_to(cell: Vector2i) -> void:
+	if cell == _last_cell:
+		return
+	var old: Variant = _document.erase_tile(_erase_layer, cell)
+	if old == null:
+		return
+	_erase_cells.append({"cell": cell, "old": old})
+	_last_cell = cell
+
+func _end_erase() -> void:
+	_last_cell = Vector2i(99999, 99999)
+	if not _erasing:
+		return
+	_erasing = false
+	if _erase_cells.is_empty():
+		return
+	var entries: Array = _erase_cells.duplicate(true)
+	var do_erase := func() -> void:
+		for e in entries:
+			_document.erase_tile(_erase_layer, (e as Dictionary)["cell"], true)
+	var undo_erase := func() -> void:
+		for e in entries:
+			var prev: Dictionary = (e as Dictionary)["old"]
+			if not prev.is_empty():
+				_document.set_tile(_erase_layer, (e as Dictionary)["cell"], str(prev["asset_id"]), true)
+	_commands.push("擦除 %d 格" % entries.size(), do_erase, undo_erase)
+
+## 物件层擦除：删掉鼠标格脚印覆盖的最上层物件（单命令可撤销）
+func _erase_object_at(cell: Vector2i, layer: String) -> void:
+	var obj_id := _view.pick_object_on_layer(layer, cell)
+	if obj_id < 0:
+		return
+	var removed: Dictionary = _document.remove_object(obj_id)
+	if removed.is_empty():
+		return
+	var snapshot := removed.duplicate(true)
+	var do_del := func() -> void: _document.remove_object(obj_id, true)
+	var undo_del := func() -> void: _document.insert_object(snapshot, true)
+	_commands.push("擦除物件", do_del, undo_del)
 
 func _begin_paint() -> void:
 	if _selected_asset_id.is_empty() or _mouse_over_panel():
