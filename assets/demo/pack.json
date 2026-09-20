@@ -1,0 +1,53 @@
+{
+	"assets": [
+		{
+			"category": "ground",
+			"file": "tiles/grass.png",
+			"name": "草地"
+		},
+		{
+			"category": "ground",
+			"file": "tiles/dirt.png",
+			"name": "泥土"
+		},
+		{
+			"category": "road",
+			"connections": [
+				"left",
+				"right"
+			],
+			"file": "tiles/road_h.png",
+			"name": "道路·直"
+		},
+		{
+			"category": "road",
+			"connections": [
+				"right",
+				"down"
+			],
+			"file": "tiles/road_corner.png",
+			"name": "道路·弯"
+		},
+		{
+			"category": "tree",
+			"file": "props/tree_small.png",
+			"name": "小树"
+		},
+		{
+			"category": "tree",
+			"file": "props/tree_big.png",
+			"name": "大树"
+		},
+		{
+			"category": "building",
+			"file": "props/house.png",
+			"name": "民居"
+		},
+		{
+			"category": "building",
+			"file": "props/house_shop.png",
+			"name": "店铺"
+		}
+	],
+	"name": "演示素材包"
+}
