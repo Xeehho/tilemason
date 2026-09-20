@@ -67,6 +67,7 @@ func _ready() -> void:
 
 	_build_layer_panel()
 	_build_status_bar()
+	_connect_status_signals()
 	refresh_status()
 
 	_preview = Sprite2D.new()
@@ -221,6 +222,7 @@ func _load_map_from(path: String) -> bool:
 	_view.setup(_document, _library)
 	add_child(_view)
 	_build_layer_panel() # 重绑新文档
+	_connect_status_signals()
 	refresh_status()
 	var tiles := 0
 	for layer in _document.get_layers():
@@ -909,8 +911,21 @@ func refresh_status() -> void:
 	if not _selected_asset_id.is_empty():
 		var asset := _library.get_asset(_selected_asset_id)
 		if not asset.is_empty():
-			asset_text = "%s" % asset["name"]
+			# 显示放置目标图层与锁定警示（用户验收反馈：需要知道操作会作用在哪）
+			var layer_id: String = CATEGORY_TO_LAYER.get(str(asset["category"]), "deco")
+			var layer := _document.get_layer(layer_id)
+			var layer_name := str(layer.get("name", layer_id)) if not layer.is_empty() else layer_id
+			var lock_hint := "（该层已锁定，放置会被拒绝）" if _document.is_layer_locked(layer_id) else ""
+			asset_text = "%s → 落在「%s」%s" % [asset["name"], layer_name, lock_hint]
 	_status.set_line("工具：%s ｜ 素材：%s ｜ S 选择 · E 橡皮 · L 直线 · Ctrl+框 矩形 · Ctrl+Z/Y 撤销重做 · Ctrl+S 保存 · F9 检查" % [tool, asset_text])
+
+## 图层属性变化影响素材落层提示（锁定警示），载入新文档后重连
+func _connect_status_signals() -> void:
+	if not _document.layer_changed.is_connected(_on_doc_layer_changed):
+		_document.layer_changed.connect(_on_doc_layer_changed)
+
+func _on_doc_layer_changed(_layer_id: String, _key: String) -> void:
+	refresh_status()
 
 func _eraser_layer_name() -> String:
 	var layer := _document.get_layer(_eraser_layer())
