@@ -21,6 +21,7 @@ var _grid: GridContainer
 var _empty_hint: Label
 var _selected: TextureButton
 var _buttons := {} # asset_id -> TextureButton（当前分类网格内的按钮）
+var _search_box: LineEdit # 搜索框（过滤当前分类，§6.1 搜索）
 var _recent_ids: Array = [] # 最近使用（虚拟分类「最近」）
 var _favorite_ids: Array = [] # 收藏（虚拟分类「★收藏」，F 键切换）
 var _thumbs := {} # asset_id -> ImageTexture（整数倍缩放后的缩略图）
@@ -80,6 +81,14 @@ func _build_ui() -> void:
 	box.add_theme_constant_override("separation", 4)
 	scroll.add_child(box)
 
+	var search := LineEdit.new()
+	search.placeholder_text = "搜索素材…"
+	search.right_icon = null
+	search.text_changed.connect(func(_t: String) -> void:
+		_on_search_changed())
+	box.add_child(search)
+	_search_box = search
+
 	_grid = GridContainer.new()
 	_grid.columns = 3
 	_grid.add_theme_constant_override("h_separation", 6)
@@ -123,6 +132,11 @@ func _rebuild_category_list() -> void:
 	_category_list.select(0)
 	_category_list.item_selected.emit(0)
 
+## 搜索词变化：重刷当前分类网格
+func _on_search_changed() -> void:
+	if _category_list.get_selected_items().size() > 0:
+		_on_category_selected(_category_list.get_selected_items()[0])
+
 ## 外部注入最近使用清单（虚拟分类「最近」内容）
 func set_recent(ids: Array) -> void:
 	_recent_ids = ids.duplicate()
@@ -151,6 +165,15 @@ func _on_category_selected(index: int) -> void:
 				assets.append(asset)
 	else:
 		assets = _library.get_assets_by_category(category)
+	# 搜索过滤（§6.1）：按名称/素材 id 包含匹配，虚拟分类同样生效
+	var keyword := _search_box.text.strip_edges().to_lower()
+	if not keyword.is_empty():
+		var filtered := []
+		for asset in assets:
+			var name_l := str((asset as Dictionary)["name"]).to_lower()
+			if name_l.find(keyword) >= 0 or str((asset as Dictionary)["id"]).to_lower().find(keyword) >= 0:
+				filtered.append(asset)
+		assets = filtered
 	_empty_hint.visible = assets.is_empty()
 	for asset in assets:
 		var btn := _make_thumb_button(asset as Dictionary)
