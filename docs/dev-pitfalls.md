@@ -13,6 +13,8 @@
 7. **JSON.parse_string 数字全是 float**：整数字面量也解析为 float；`==` 对 Array/Dictionary 是非递归比较（嵌套内容不等价判真），深比较逐层或比序列化。
 8. **Dictionary.merged 默认不覆盖**：`a.merged(b)` 的 `overwrite` 默认 false，b 中与 a 重名的键被静默丢弃；打补丁语义必须显式 `a.merged(b, true)`（TileMason update_object 探针实测踩中）。
 
+9. **:= 推断声明必须带 var**：`x := value` 不带 `var` 前缀不是隐式声明，解析器按「表达式接冒号」报 `Expected end of statement after expression, found ":"`（TileMason 检查探针实测踩中，报错行就是声明行、上下文再干净也是它）。
+
 ## 二、对象与信号
 
 9. **内联 RefCounted 即建即释**：临时创建的 RefCounted 实例在所在表达式结束后立即释放，之后再取的引用悬空；需要存活就存进成员变量。
@@ -37,4 +39,4 @@
 22. **--check-only 必须带 --script**：`--headless --check-only --script res://path.gd` 才会真正解析脚本。
 23. **macOS universal 导出双要求**：项目设置 `rendering/textures/vram_compression/import_etc2_astc=true`（预设里 texture_format 开关不够用）+ 预设选项 `application/bundle_identifier`（键名没有 `export/` 前缀）。
 24. **新克隆/worktree 三步**：`--import` 重建 `.godot` 类缓存（class_name 解析必需）；新 `.gd` 首跑生成 `.uid` 随提交；缺缓存时脚本报"类不存在"多为缓存未建。
-25. **project.godot 换行纪律**：仓库 `.gitattributes` 已强制 LF；任何工具化读写注入前先做字节快照校验，防止静默改换行。
+26. **project.godot 换行纪律**：仓库 `.gitattributes` 已强制 LF；任何工具化读写注入前先做字节快照校验，防止静默改换行。
