@@ -128,6 +128,8 @@ func _ready() -> void:
 
 	if OS.get_cmdline_user_args().has("--screenshot"):
 		_capture_screenshot() # 无人值守视觉取证：摆样 + 延时截屏后退出
+	elif OS.get_cmdline_user_args().has("--export-shot"):
+		_capture_export_shot() # 导出场景运行时渲染取证
 
 ## 半透明预览：跟随鼠标展示选中素材落点（面板区域内/橡皮擦模式下隐藏）
 ## 多格物件同时显示占格范围框（design.md §4 覆盖关系 / §8 占用格范围）
@@ -1431,6 +1433,34 @@ func _eraser_layer_name() -> String:
 	if layer.is_empty():
 		return _eraser_layer()
 	return str(layer["name"])
+
+## 导出场景渲染取证：摆样→导出→整场景替换为导出产物→相机截屏（design.md §10 运行时截图验收）
+func _capture_export_shot() -> void:
+	_demo_place_for_screenshot()
+	var result: Dictionary = SceneExporter.export_scene(_document, _library)
+	if not result.get("ok", false):
+		print("[TileMason] 导出失败，无法取证")
+		get_tree().quit(1)
+		return
+	var packed: PackedScene = load(str(result["path"]))
+	if packed == null:
+		print("[TileMason] 导出场景回载失败")
+		get_tree().quit(1)
+		return
+	var inst := packed.instantiate()
+	get_tree().root.add_child.call_deferred(inst)
+	await get_tree().create_timer(1.5).timeout # 等挂树+scene tiles 实例化
+	# 相机聚焦摆样区（世界 (0,0) 附近）
+	var cam := Camera2D.new()
+	inst.add_child.call_deferred(cam)
+	await get_tree().create_timer(0.3).timeout
+	cam.position = Vector2(-20, 60)
+	cam.make_current()
+	await get_tree().create_timer(0.5).timeout
+	var img := get_viewport().get_texture().get_image()
+	img.save_png("user://export_shot.png")
+	print("[TileMason] 导出场景截图：%s" % ProjectSettings.globalize_path("user://export_shot.png"))
+	get_tree().quit(0)
 
 ## 视觉取证用：文档为空时程序化摆样（一条道路+草地+建筑+树），延时截屏存盘后退出
 ## 须窗口模式运行，headless 无渲染

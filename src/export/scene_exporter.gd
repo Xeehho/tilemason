@@ -98,7 +98,10 @@ static func export_scene(doc: MapDocument, lib: AssetLibrary, file_name := "map"
 	if ResourceSaver.save(packed, path) != OK:
 		root.free()
 		return {"ok": false, "path": "", "tiles": 0, "props": 0, "warnings": ["保存失败"]}
-	root.queue_free()
+	if root.is_inside_tree():
+		root.queue_free()
+	else:
+		root.free() # 无 SceneTree（自定义 MainLoop/纯探针）时 queue_free 不可用
 	return {"ok": true, "path": path, "tiles": tile_count, "props": prop_count, "warnings": warnings}
 
 ## 物件 TileSet：scenes collection；每素材生成子场景文件（底边中心配方）落盘后注册

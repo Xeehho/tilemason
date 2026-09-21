@@ -65,6 +65,7 @@ func _init() -> void:
 			_check(rect_shape != null and rect_shape.size == Vector2(48, 16), "碰撞=底边脚印 48×min(48,16)")
 			prop.free()
 		inst.free()
+	_test_path()
 	_finish()
 
 func _finish() -> void:
@@ -79,6 +80,32 @@ func _check(cond: bool, name: String) -> void:
 	else:
 		_fail += 1
 		print("[TileMason] FAIL %s" % name)
+
+func _test_path() -> void:
+	# 可通行性（design.md §10 真实移动的离散近似）：碰撞脚印占格为障碍的 BFS
+	# 夹具件在 (2,5)、48px 件脚印=3 宽×1 高（形态A：宽×min(件高,格高)）
+	var blocked := {}
+	for dx in 3:
+		blocked[Vector2i(2 + dx, 5)] = true
+	_check(_path_exists(blocked, Vector2i(0, 8), Vector2i(6, 8), Rect2i(-3, 0, 12, 12)), "绕开碰撞脚印存在通路")
+	for y in range(0, 12): # x=2 整列封断（边界内无绕行）
+		blocked[Vector2i(2, y)] = true
+	_check(not _path_exists(blocked, Vector2i(0, 8), Vector2i(6, 8), Rect2i(-3, 0, 12, 12)), "整列封断后无通路（负例）")
+
+func _path_exists(blocked: Dictionary, from: Vector2i, to: Vector2i, bounds: Rect2i) -> bool:
+	var visited := {}
+	var queue: Array = [from]
+	visited[from] = true
+	while not queue.is_empty():
+		var c: Vector2i = queue.pop_front()
+		if c == to:
+			return true
+		for dir in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var n: Vector2i = c + dir
+			if bounds.has_point(n) and not blocked.has(n) and not visited.has(n):
+				visited[n] = true
+				queue.append(n)
+	return false
 
 func _build_doc() -> MapDocument:
 	var doc := MapDocument.new()
