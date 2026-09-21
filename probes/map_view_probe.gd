@@ -7,6 +7,7 @@ extends SceneTree
 
 var _pass := 0
 var _fail := 0
+var _views: Array = [] ## 本探针创建的全部 MapView——退出前必须 free，防 CanvasItem/纹理泄漏（2026-09-20 验收报告阻断项 A）
 
 const FIXTURE_ROOT := "user://probe_mv"
 
@@ -17,6 +18,7 @@ func _init() -> void:
 	lib.scan([FIXTURE_ROOT])
 	var doc := MapDocument.new()
 	var view := MapView.new()
+	_views.append(view)
 	view.setup(doc, lib)
 	_test_tiles(doc, view)
 	_test_objects(doc, view)
@@ -29,6 +31,14 @@ func _init() -> void:
 	_cleanup()
 	print("[TileMason] 探针结束：通过 %d / 失败 %d" % [_pass, _fail])
 	quit(0 if _fail == 0 else 1)
+
+## 清理：显式 free 所有视图节点（含子 Sprite），让纹理引用归零后才退出
+func _cleanup() -> void:
+	for v in _views:
+		if is_instance_valid(v):
+			(v as Node).free()
+	_views.clear()
+	_remove_dir_recursive(FIXTURE_ROOT)
 
 func _check(cond: bool, name: String) -> void:
 	if cond:
@@ -237,6 +247,7 @@ func _test_rebuild(doc: MapDocument, lib: AssetLibrary, view: MapView) -> void:
 	doc.set_tile("ground", Vector2i(2, 2), "probe_mv/tiles/tile.png")
 	var obj_id := doc.add_object({"asset_id": "probe_mv/props/prop.png", "layer": "deco", "cell": Vector2i(0, 0)})
 	var view2 := MapView.new()
+	_views.append(view2)
 	view2.setup(doc, lib)
 	_check(view2.tile_sprite_count() == tiles_before + 2 and view2.get_object_sprite(obj_id) != null, "同文档重建视图全量渲染（%d 方块+新物件）" % view2.tile_sprite_count())
 
@@ -257,9 +268,6 @@ func _setup_fixtures() -> void:
 			{"file": "props/prop.png", "name": "物件", "category": "deco"},
 		],
 	}, "\t"))
-
-func _cleanup() -> void:
-	_remove_dir_recursive(FIXTURE_ROOT)
 
 func _remove_dir_recursive(path: String) -> void:
 	var dir := DirAccess.open(path)
