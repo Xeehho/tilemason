@@ -155,6 +155,7 @@ func _normalize_asset(raw: Dictionary, pack_dir: String, pack_id: String) -> Dic
 		"category": category,
 		"anchor": anchor,
 		"connections": (raw.get("connections", []) as Array).duplicate(),
+		"group": str(raw.get("group", "")), # 三层菜单路径（如「东宫1/核心建筑板」，空=按分类平铺）
 	}
 	# cells 缺省按 PNG 实际尺寸 / 网格推导（48px→3×3）；清单显式声明优先
 	if raw.has("cells"):

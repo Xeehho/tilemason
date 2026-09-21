@@ -17,7 +17,7 @@ const CATEGORY_NAMES := {
 }
 
 var _library: AssetLibrary
-var _category_list: ItemList
+var _category_list: Tree # 三层菜单树（虚拟分类置顶+group 树+原分类）
 var _grid: GridContainer
 var _empty_hint: Label
 var _selected: TextureButton
@@ -63,10 +63,12 @@ func _build_ui() -> void:
 	hbox.set_anchors_preset(Control.PRESET_FULL_RECT)
 	margin.add_child(hbox)
 
-	_category_list = ItemList.new()
-	_category_list.custom_minimum_size = Vector2(96, 0)
+	_category_list = Tree.new()
+	_category_list.custom_minimum_size = Vector2(150, 0)
 	_category_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_category_list.item_selected.connect(_on_category_selected)
+	_category_list.hide_root = true
+	_category_list.scroll_horizontal_enabled = false
+	_category_list.item_selected.connect(_on_tree_selected)
 	hbox.add_child(_category_list)
 
 	var sep := VSeparator.new() # 分类与缩略图区的视觉分隔
@@ -114,45 +116,91 @@ func _populate_categories() -> void:
 
 ## 分类列表：虚拟分类（最近/★收藏）置顶，其后按固定顺序列实际分类；重入选中保持
 func _rebuild_category_list() -> void:
-	var selected_meta := ""
-	if _category_list.item_count > 0 and _category_list.get_selected_items().size() > 0:
-		selected_meta = str(_category_list.get_item_metadata(_category_list.get_selected_items()[0]))
+	var selected_meta := _selected_meta()
 	_category_list.clear()
+	var root := _category_list.create_item()
 	if not _recent_ids.is_empty():
-		_category_list.add_item("最近")
-		_category_list.set_item_metadata(_category_list.item_count - 1, "__recent")
+		_add_leaf(root, "最近", "__recent")
 	if not _favorite_ids.is_empty():
-		_category_list.add_item("★收藏")
-		_category_list.set_item_metadata(_category_list.item_count - 1, "__fav")
-	for tag in _tag_ids.keys(): # 标签虚拟分类（每个标签一条）
-		_category_list.add_item("#%s" % str(tag))
-		_category_list.set_item_metadata(_category_list.item_count - 1, "__tag:" + str(tag))
+		_add_leaf(root, "★收藏", "__fav")
+	for tag in _tag_ids.keys():
+		_add_leaf(root, "#%s" % str(tag), "__tag:" + str(tag))
+	# group 三层树：外层（区域=抠图文件夹父级名）→ 板块（叶=选中显示素材）
+	var group_roots := {}
+	var boards := {}
+	for asset in (_library.get_assets() if _library != null else []):
+		var a := asset as Dictionary
+		var group := str(a.get("group", ""))
+		if group.is_empty():
+			continue
+		var parts := group.split("/", true, 1)
+		var outer := parts[0]
+		var board := parts[1] if parts.size() > 1 else outer
+		if not group_roots.has(outer):
+			var item := _category_list.create_item(root)
+			item.set_text(0, outer)
+			item.set_collapsed(true)
+			group_roots[outer] = item
+		if not boards.has(group):
+			var leaf := _category_list.create_item(group_roots[outer])
+			leaf.set_text(0, board)
+			leaf.set_metadata(0, "__group:" + group)
+			boards[group] = leaf
+	# 原分类平铺（无 group 的素材）
 	var categories: Array = _library.get_categories() if _library != null else []
-	if categories.is_empty() and _recent_ids.is_empty() and _favorite_ids.is_empty() and _tag_ids.is_empty():
-		_empty_hint.text = "未找到素材包\n可将自己的素材包放入\nassets/packs/ 目录"
+	if categories.is_empty() and _recent_ids.is_empty() and _favorite_ids.is_empty() and _tag_ids.is_empty() and group_roots.is_empty():
+		_empty_hint.text = "未找到素材包，可将自己的素材包放入 assets/packs/ 目录"
 		_empty_hint.visible = true
 		return
 	for category in categories:
-		var count := _library.get_assets_by_category(str(category)).size()
+		var all := _library.get_assets_by_category(str(category))
+		var plain := 0
+		for a in all:
+			if str((a as Dictionary).get("group", "")).is_empty():
+				plain += 1
+		if plain == 0 and not group_roots.is_empty():
+			continue
 		var label := str(CATEGORY_NAMES.get(str(category), str(category)))
-		if count > 0:
-			label += "（%d）" % count
-		_category_list.add_item(label)
-		_category_list.set_item_metadata(_category_list.item_count - 1, str(category))
-	for i in _category_list.item_count: # 恢复选中；原选中不存在则选第一项
-		if str(_category_list.get_item_metadata(i)) == selected_meta:
-			_category_list.select(i)
-			_on_category_selected(i)
-			return
-	_category_list.select(0)
-	_category_list.item_selected.emit(0)
+		if plain > 0:
+			label += "（%d）" % plain
+		_add_leaf(root, label, str(category))
+	if selected_meta != "" and _select_by_meta(root, selected_meta):
+		return
+	var first := root.get_first_child()
+	if first != null:
+		first.select(0)
 
-## 搜索词变化：重刷当前分类网格
-func _on_search_changed() -> void:
-	if _category_list.get_selected_items().size() > 0:
-		_on_category_selected(_category_list.get_selected_items()[0])
+func _add_leaf(parent: TreeItem, label: String, meta: String) -> TreeItem:
+	var item := _category_list.create_item(parent)
+	item.set_text(0, label)
+	item.set_metadata(0, meta)
+	return item
 
-## 外部注入最近使用清单（虚拟分类「最近」内容）
+func _selected_meta() -> String:
+	var sel := _category_list.get_selected()
+	return str(sel.get_metadata(0)) if sel != null else ""
+
+func _select_by_meta(from: TreeItem, meta: String) -> bool:
+	var item := from.get_first_child()
+	while item != null:
+		if str(item.get_metadata(0)) == meta and item.get_first_child() == null:
+			item.select(0)
+			return true
+		if _select_by_meta(item, meta):
+			return true
+		item = item.get_next()
+	return false
+
+## Tree 选中：转发到统一分类处理（meta 字符串与旧 index 版语义对齐）
+func _on_tree_selected() -> void:
+	var sel := _category_list.get_selected()
+	if sel == null:
+		return
+	var meta := str(sel.get_metadata(0))
+	if meta.is_empty(): # 区域父节点：展开由 Tree 自理，不切素材
+		return
+	_on_category_selected(meta)
+
 func set_recent(ids: Array) -> void:
 	_recent_ids = ids.duplicate()
 	_rebuild_category_list()
@@ -167,17 +215,16 @@ func set_favorites(ids: Array) -> void:
 	_favorite_ids = ids.duplicate()
 	_rebuild_category_list()
 
-func _on_category_selected(index: int) -> void:
+func _on_category_selected(meta: String) -> void:
 	if _selected != null:
 		_selected.modulate = Color.WHITE
 		_selected = null
 	for child in _grid.get_children():
 		child.queue_free()
 	_buttons.clear()
-	var category := str(_category_list.get_item_metadata(index))
+	var category := meta
 	var assets: Array
 	if category == "__recent" or category == "__fav" or category.begins_with("__tag:"):
-		# 虚拟分类：按记录顺序映射素材（失效 id 过滤）
 		var ids: Array
 		if category == "__recent":
 			ids = _recent_ids
@@ -185,26 +232,42 @@ func _on_category_selected(index: int) -> void:
 			ids = _favorite_ids
 		else:
 			ids = _tag_ids.get(category.substr("__tag:".length()), [])
+		var vlist := []
 		for id in ids:
 			var asset := _library.get_asset(str(id))
 			if not asset.is_empty():
-				assets.append(asset)
+				vlist.append(asset)
+		assets = vlist
+	elif category.begins_with("__group:"):
+		var want := category.substr("__group:".length())
+		for a in _library.get_assets():
+			if str((a as Dictionary).get("group", "")) == want:
+				assets.append(a)
 	else:
-		assets = _library.get_assets_by_category(category)
-	# 搜索过滤（§6.1）：按名称/素材 id 包含匹配，虚拟分类同样生效
+		var raw := _library.get_assets_by_category(category)
+		for a in raw:
+			if str((a as Dictionary).get("group", "")).is_empty():
+				assets.append(a)
+	# 搜索过滤（当前分类内按名称/id 匹配）
 	var keyword := _search_box.text.strip_edges().to_lower()
 	if not keyword.is_empty():
-		var filtered := []
+		var klist := []
 		for asset in assets:
 			var name_l := str((asset as Dictionary)["name"]).to_lower()
 			if name_l.find(keyword) >= 0 or str((asset as Dictionary)["id"]).to_lower().find(keyword) >= 0:
-				filtered.append(asset)
-		assets = filtered
+				klist.append(asset)
+		assets = klist
 	_empty_hint.visible = assets.is_empty()
 	for asset in assets:
 		var btn := _make_thumb_button(asset as Dictionary)
 		_buttons[str((asset as Dictionary)["id"])] = btn
 		_grid.add_child(btn)
+
+## 搜索词变化：重刷当前选中节点内容
+func _on_search_changed() -> void:
+	var sel := _category_list.get_selected()
+	if sel != null:
+		_on_category_selected(str(sel.get_metadata(0)))
 
 func _make_thumb_button(asset: Dictionary) -> TextureButton:
 	var asset_id := str(asset["id"])
