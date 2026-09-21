@@ -14,7 +14,9 @@ func _init() -> void:
 	_save("select", _draw_select())    # 选择
 	_save("eyedrop", _draw_eyedrop())  # 吸管
 	_save("prefab", _draw_prefab())    # 预制件
-	print("[TileMason] 工具图标生成完毕（8 件）")
+	_save("undo", _draw_undo())        # 撤销
+	_save("redo", _draw_redo())        # 重做
+	print("[TileMason] 工具图标生成完毕（10 件）")
 	quit(0)
 
 func _save(name: String, img: Image) -> void:
@@ -100,6 +102,25 @@ func _draw_eyedrop() -> Image:
 	_rect(img, 5, 17, 4, 3, c) # 吸头
 	_rect(img, 17, 3, 4, 5, c) # 胶头
 	return img
+
+func _arrow(color: Color, flip: bool) -> Image:
+	var img := _canvas()
+	for i in 8: # 箭杆
+		var y := 10 + i
+		var x := (17 - i) if flip else (6 + i)
+		_px(img, x, y, color)
+		_px(img, x + 1, y, color)
+	var tip_x := 6 if flip else 16
+	for j in 5: # 箭头折线
+		_px(img, tip_x + (j if flip else -j), 10 + j, color)
+		_px(img, tip_x + 1 + (j if flip else -j), 10 + j, color)
+	return img
+
+func _draw_undo() -> Image:
+	return _arrow(Color(0.75, 0.78, 0.85), true)
+
+func _draw_redo() -> Image:
+	return _arrow(Color(0.75, 0.78, 0.85), false)
 
 func _draw_prefab() -> Image:
 	var img := _canvas()

@@ -1355,7 +1355,7 @@ func _build_toolbar() -> void:
 	_toolbar.anchor_top = 0.0
 	_toolbar.anchor_bottom = 0.0
 	_toolbar.offset_left = 200 # 让开左侧图层面板
-	_toolbar.offset_right = 560
+	_toolbar.offset_right = 660
 	_toolbar.offset_top = 4
 	_toolbar.offset_bottom = 48
 
@@ -1390,6 +1390,10 @@ func _toolbar_action(tool_id: String) -> void:
 			print("[TileMason] 吸管：在画布上右键即可吸取素材")
 		"prefab":
 			print("[TileMason] 预制件：框选内容后 Ctrl+P 保存，P 放置（左下面板管理）")
+		"undo":
+			_do_undo()
+		"redo":
+			_do_redo()
 	_refresh_toolbar()
 
 ## 汇总当前活动工具，刷新工具栏高亮（任何模式切换后经 refresh_status 联动）

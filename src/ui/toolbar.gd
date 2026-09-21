@@ -15,6 +15,8 @@ const TOOLS: Array = [
 	{"id": "select", "icon": "select", "hint": "选择 S（框选/移动/复制）"},
 	{"id": "eyedrop", "icon": "eyedrop", "hint": "吸管（=画布右键）"},
 	{"id": "prefab", "icon": "prefab", "hint": "预制件（Ctrl+P 保存 / P 放置）"},
+	{"id": "undo", "icon": "undo", "hint": "撤销 Ctrl+Z"},
+	{"id": "redo", "icon": "redo", "hint": "重做 Ctrl+Y"},
 ]
 
 var _buttons := {} # tool_id -> TextureButton
