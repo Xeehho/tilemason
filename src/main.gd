@@ -1339,6 +1339,7 @@ func _capture_screenshot() -> void:
 
 func _demo_place_for_screenshot() -> void:
 	if _document.has_content():
+		print("[TileMason] [取证] 文档已有内容，跳过摆样（截图像素断言将不成立——取证须在空文档/隔离用户数据目录下运行）")
 		return # 已有内容不摆样
 	# 一条东西向道路（y=0，x=-6..-2）
 	for x in range(-6, -1):
