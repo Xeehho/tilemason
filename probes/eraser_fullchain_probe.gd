@@ -27,6 +27,7 @@ func _init() -> void:
 	await _scene_object_click()
 	await _scene_variant_refresh()
 	await _scene_locked_layer()
+	await _scene_adjacent_variants()
 	_finish()
 
 ## 自建确定性场景：清全部内容后重摆（道路/草地=ground，墙=terrain，1 物件=building）
@@ -203,6 +204,29 @@ func _check(cond: bool, name: String) -> void:
 	else:
 		_fail += 1
 		print("[TileMason] FAIL %s" % name)
+
+## 相邻变体格拖刷：松手不得复活（extras 变体刷新曾覆盖擦除语义——用户实测「刚擦完松手又出现」）
+func _scene_adjacent_variants() -> void:
+	for l in main._document.get_layers(): # 清前序场景残留（锁定层场景会留格）
+		var lid := str((l as Dictionary)["id"])
+		for c in main._document.get_tile_coords(lid).duplicate():
+			main._document.erase_tile(lid, c, true)
+	main._commands.clear()
+	# 五连横路：auto_connect 把中段刷直道、端头刷端头变体（变体≠原素材，extras 才有记录）
+	for x in [-6, -5, -4, -3, -2]:
+		main._place_asset(main._demo_asset("tiles/road_h.png"), Vector2i(x, 0))
+	main._commands.clear()
+	var n0 := _tiles("ground")
+	main._toggle_eraser()
+	await _begin_erase_fixed()
+	for x in [-2, -3, -4, -5, -6]: # 相邻连续拖刷（擦A→harvest刷B变体→擦B→base/extras重叠）
+		main._erase_to(Vector2i(x, 0))
+	var mid_stroke := _tiles("ground")
+	main._end_erase() # 松手：push 立即重放 do——旧代码此处把格写回变体
+	_check(mid_stroke == 0, "拖刷中已擦净（%d）" % mid_stroke)
+	_check(_tiles("ground") == 0, "松手后不复活（%d 格，曾全部变端头变体）" % _tiles("ground"))
+	main._do_undo()
+	_check(_tiles("ground") == n0, "整笔撤销恢复（%d=%d）" % [_tiles("ground"), n0])
 
 func _finish() -> void:
 	print("[TileMason] 探针结束：通过 %d / 失败 %d" % [_pass, _fail])

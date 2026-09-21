@@ -77,6 +77,9 @@ static func merge_tile_changes(base: Array, extras: Dictionary, painted_asset: S
 	for key in extras.keys():
 		var x: Dictionary = extras[key]
 		if merged.has(key):
+			if painted_asset.is_empty():
+				continue # 擦除笔画：被擦格的 new 必须保持 null——变体刷新在拖刷相邻格时
+					# 与擦除时序错配（先算出「该有变体」随后格被擦），覆盖会把格写回（实测「松手复活」）
 			(merged[key] as Dictionary)["new"] = str(x["new_asset_id"])
 			if x.has("layer") and not (merged[key] as Dictionary).has("layer"):
 				(merged[key] as Dictionary)["layer"] = str(x["layer"])
