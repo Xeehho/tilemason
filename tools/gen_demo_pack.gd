@@ -115,7 +115,7 @@ func _paint_road_h(img: Image) -> void:
 	_rect(img, 0, 0, 16, 2, ROAD_EDGE) # 上路缘
 	_rect(img, 0, 14, 16, 2, ROAD_EDGE) # 下路缘
 	_rect(img, 0, 2, 16, 12, ROAD_BODY) # 路面
-	for x in range(2, 14, 4): # 中央虚线
+	for x in range(0, 16, 4): # 中央虚线（周期 4px：横铺跨砖无缝，接缝处不再出现 6px 长空档）
 		_rect(img, x, 7, 2, 2, ROAD_DASH)
 
 func _paint_road_corner(img: Image) -> void:
