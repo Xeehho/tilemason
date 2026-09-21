@@ -50,11 +50,13 @@ var _tag_input_text := "" ## 输入缓冲
 var _hotbar: Hotbar ## 底部快捷栏（design.md §6.2）
 var _recent: Array = [] ## 最近使用素材 id（新选中的排最前）
 var _favorites: Array = [] ## 收藏素材 id
-const HOTBAR_DEFAULT: Array = [ ## 1-7 素材位默认绑定（随演示包；用户素材包就位后可扩展自定义）
+const HOTBAR_DEFAULT: Array = [ ## 槽 1-7 默认绑定（用户右键自定义后以 hotbar.json 为准）
 	"demo/tiles/grass.png", "demo/tiles/road_h.png", "demo/tiles/wall_brick.png",
 	"demo/props/house.png", "demo/props/tree_small.png", "demo/props/stall_red.png",
 	"demo/props/house_shop.png",
 ]
+const HOTBAR_PATH := "user://hotbar.json"
+var _hotbar_bindings: Array = HOTBAR_DEFAULT.duplicate()
 var _selection := Selection.new() ## 选区（S 选择模式）
 var _select_mode := false ## S 键切换：框选/移动物件（design.md §2.1/§7）
 var _marqueeing := false ## 框选拖动进行中
@@ -272,8 +274,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			print("[TileMason] 素材面板：%s" % ("显示" if _panel.visible else "隐藏（Tab 再显）"))
 		elif key.keycode == KEY_Q and not key.ctrl_pressed:
 			_focus_selection() # design.md §6.3 F 聚焦——F 被收藏占用，用 Q 近旁键位
-		elif key.keycode >= KEY_1 and key.keycode <= KEY_9:
-			_hotbar_activate(key.keycode - KEY_1)
+		elif key.keycode >= KEY_1 and key.keycode <= KEY_7:
+			_hotbar_activate(key.keycode - KEY_1 + 1)
 		elif key.keycode == KEY_ESCAPE:
 			_exit_select_mode()
 			_exit_line_mode()
@@ -1105,9 +1107,13 @@ func _build_hotbar() -> void:
 	var layer_ui := CanvasLayer.new()
 	layer_ui.layer = 10
 	add_child(layer_ui)
+	var saved_bar := _load_id_list(HOTBAR_PATH)
+	if not saved_bar.is_empty():
+		_hotbar_bindings = saved_bar
 	_hotbar = Hotbar.new()
-	_hotbar.setup(_library, HOTBAR_DEFAULT)
+	_hotbar.setup(_library, _hotbar_bindings)
 	_hotbar.slot_activated.connect(_hotbar_activate)
+	_hotbar.slot_customized.connect(_hotbar_customize)
 	layer_ui.add_child(_hotbar)
 	_hotbar.anchor_left = 0.5
 	_hotbar.anchor_right = 0.5
@@ -1118,18 +1124,29 @@ func _build_hotbar() -> void:
 	_hotbar.offset_top = -84
 	_hotbar.offset_bottom = -30
 
-## 槽位激活：1-7 选素材、8 橡皮擦、9 吸管提示
+## 槽位激活：0=橡皮常驻格，1-7=素材槽
 func _hotbar_activate(index: int) -> void:
-	match index:
-		7:
-			_toggle_eraser()
-		8:
-			print("[TileMason] 吸管：在画布上直接右键即可吸取素材")
-		_:
-			var asset_id := _hotbar.binding_asset_id(index)
-			if asset_id.is_empty():
-				return
-			_panel.select_asset(asset_id) # 走面板选中链路（信号回写选中+状态栏）
+	if index == 0:
+		_toggle_eraser()
+		return
+	var asset_id: String = _hotbar_bindings[index - 1] if index - 1 < _hotbar_bindings.size() else ""
+	if asset_id.is_empty():
+		print("[TileMason] 空槽：先选一个素材，再右键此格绑定")
+		return
+	_panel.select_asset(asset_id) # 走面板选中链路（选中/状态栏/预览联动）
+
+## 右键自定义槽位：绑定当前选中素材；无选中=清空该槽；落盘 hotbar.json
+func _hotbar_customize(index: int) -> void:
+	if index < 1 or index > 7:
+		return
+	if _selected_asset_id.is_empty():
+		_hotbar_bindings[index - 1] = ""
+		print("[TileMason] 已清空槽 %d（选中素材后右键可重新绑定）" % index)
+	else:
+		_hotbar_bindings[index - 1] = _selected_asset_id
+		print("[TileMason] 槽 %d 已绑定：%s" % [index, str(_library.get_asset(_selected_asset_id).get("name", _selected_asset_id))])
+	_hotbar.set_bindings(_hotbar_bindings)
+	_save_id_list(HOTBAR_PATH, _hotbar_bindings)
 
 ## 工具模式互斥：开启任一模式前退出其余模式（用户实测：选顶部直线/选择后
 ## 按 E 进橡皮，左键仍被直线/选择分支吃掉——_unhandled_input 按标志分发，多开必抢输入）
@@ -1428,6 +1445,8 @@ func _refresh_toolbar() -> void:
 	elif _bucket_mode:
 		id = "bucket"
 	_toolbar.set_active(id)
+	if _hotbar != null:
+		_hotbar.set_eraser_active(_eraser_mode)
 
 ## 素材面板：右侧全高停靠（design.md §6.1 最小版）
 func _build_asset_panel() -> void:

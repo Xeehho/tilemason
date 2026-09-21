@@ -50,4 +50,5 @@ CI 在 push/PR 自动跑同样三道关。**禁止目测估框：改动效果必
 - `.zcode/rules/`（本地文件，已 gitignore）：需求变更记录（`.zcode/gameWork.md`）/ 长任务交接（`.zcode/tasks/`）/ 开发完成自动保存提交——与主项目同款纪律
 - 交接文件：长任务开工即建 `.zcode/tasks/<slug>.md`，续跑会话先读再动手
 - 提交链纪律：验证步骤失败必须立即中止（逐步判空/短路，禁止 && 链一路跑到 git commit——曾因此带病推送）；批量文本补丁（python/sed）后必须 grep 验证锚点命中，未命中会静默跳过
+- 截图取证纪律：窗口取证前先 `taskkill //IM Godot* //F` 清残留进程，并**同时清空 map.json 与 map.autosave.json 双档**（残留进程的 90 秒自动保存会把旧档写进自动档，启动兜底逻辑随即载入旧内容污染取证——实测踩中）；最稳做法是隔离用户数据目录
 - commit 规范：类型前缀（feat/fix/docs/chore/refactor）保留英文；**标题与正文使用中文**，须写清「改了什么、为什么」，正文必要时分点展开，禁止一句话敷衍；AI 协作提交带 `Co-authored-by: GLM <noreply@z.ai>`；**push 前代码类改动必须已过验证三关**
