@@ -205,6 +205,28 @@ func flood_fill(layer_id: String, start: Vector2i, asset_id: String) -> Array:
 			entries.append({"cell": c, "old": prev})
 	return entries
 
+## 批量替换素材（design.md §3/P3）：全图把 from_id 换成 to_id（方块逐层跳过锁定层、物件同步）
+## 立即应用并返回变更 {tile_entries: [{layer, cell, old}], object_entries: [{id, old_asset_id}]}
+func replace_asset(from_id: String, to_id: String) -> Dictionary:
+	var result := {"tile_entries": [], "object_entries": []}
+	for layer in _layers:
+		var layer_id := str((layer as Dictionary)["id"])
+		if str((layer as Dictionary)["type"]) != "tile" or bool((layer as Dictionary).get("locked", false)):
+			continue
+		for coords in get_tile_coords(layer_id):
+			var entry := get_tile(layer_id, coords as Vector2i)
+			if not entry.is_empty() and str(entry["asset_id"]) == from_id:
+				var prev: Variant = set_tile(layer_id, coords as Vector2i, to_id)
+				if prev != null:
+					(result["tile_entries"] as Array).append({"layer": layer_id, "cell": coords, "old": prev})
+	for obj in _objects.values():
+		var o := obj as Dictionary
+		if str(o["asset_id"]) == from_id:
+			(result["object_entries"] as Array).append({"id": int(o["id"]), "old_asset_id": str(o["asset_id"])})
+			o["asset_id"] = to_id
+			object_changed.emit(int(o["id"]))
+	return result
+
 func get_tile(layer_id: String, coords: Vector2i) -> Dictionary:
 	if not _tiles.has(layer_id):
 		return {}

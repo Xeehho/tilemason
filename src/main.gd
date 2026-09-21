@@ -220,6 +220,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_toggle_bucket_mode()
 		elif key.keycode == KEY_F and not key.ctrl_pressed:
 			_toggle_favorite()
+		elif key.keycode == KEY_R and not key.ctrl_pressed:
+			_batch_replace_under_mouse()
 		elif key.keycode == KEY_TAB:
 			_panel.visible = not _panel.visible # design.md §6.3 Tab 显隐素材库
 			print("[TileMason] 素材面板：%s" % ("显示" if _panel.visible else "隐藏（Tab 再显）"))
@@ -763,6 +765,53 @@ func _select_all() -> void:
 			if not coords.is_empty():
 				cells[layer_id] = coords
 	_apply_selection(ids, cells)
+
+## 批量替换素材（design.md §3/P3）：鼠标所指素材全图替换为当前选中素材
+## 鼠标指到什么（吸管同款取法）就把全图同款换掉——tile 与物件分别处理，单命令可撤销
+func _batch_replace_under_mouse() -> void:
+	if _selected_asset_id.is_empty() or _mouse_over_panel():
+		return
+	var target_asset := _library.get_asset(_selected_asset_id)
+	if target_asset.is_empty():
+		return
+	var from_id := _view.pick_asset_id_at(mouse_cell())
+	if from_id.is_empty() or from_id == _selected_asset_id:
+		print("[TileMason] 批量替换：鼠标下没有可替换的素材（或与选中相同）")
+		return
+	var replaced: Dictionary = _document.replace_asset(from_id, _selected_asset_id)
+	var tiles: Array = replaced["tile_entries"]
+	var objects: Array = replaced["object_entries"]
+	if tiles.is_empty() and objects.is_empty():
+		print("[TileMason] 批量替换：地图中没有该素材")
+		return
+	# 自动连接刷新（撤销/重放后同样刷新，保证变体与内容一致）
+	var refresh := func() -> void:
+		for e in tiles:
+			AutoConnect.refresh_around(_document, _library, str((e as Dictionary)["layer"]), (e as Dictionary)["cell"] as Vector2i)
+	var do_rep := func() -> void:
+		for e in tiles:
+			var ee: Dictionary = e
+			_document.set_tile(str(ee["layer"]), ee["cell"] as Vector2i, _selected_asset_id, true)
+		for o in objects:
+			_document.update_object(int((o as Dictionary)["id"]), {"asset_id": _selected_asset_id}, true)
+		refresh.call()
+	var undo_rep := func() -> void:
+		for o in objects:
+			_document.update_object(int((o as Dictionary)["id"]), {"asset_id": str((o as Dictionary)["old_asset_id"])}, true)
+		for i in range(tiles.size() - 1, -1, -1):
+			var ee: Dictionary = tiles[i]
+			var prev: Dictionary = ee["old"]
+			if prev.is_empty():
+				_document.erase_tile(str(ee["layer"]), ee["cell"] as Vector2i, true)
+			else:
+				_document.set_tile(str(ee["layer"]), ee["cell"] as Vector2i, str(prev["asset_id"]), true)
+		refresh.call()
+	var from_name := from_id
+	var fa := _library.get_asset(from_id)
+	if not fa.is_empty():
+		from_name = str(fa["name"])
+	_commands.push("批量替换 %s → %s（%d 方块 %d 物件）" % [from_name, target_asset["name"], tiles.size(), objects.size()], do_rep, undo_rep)
+	print("[TileMason] 批量替换完成：%s → %s（%d 方块、%d 物件，Ctrl+Z 可撤销）" % [from_name, target_asset["name"], tiles.size(), objects.size()])
 
 ## 聚焦：相机跳到选中内容中心（无选中则到鼠标格；§6.3 聚焦选中对象）
 func _focus_selection() -> void:

@@ -15,6 +15,7 @@ func _init() -> void:
 	_test_objects()
 	_test_fill_rect()
 	_test_flood_fill()
+	_test_replace_asset()
 	_test_line_cells()
 	_test_command_stack()
 	_test_undo_with_document()
@@ -133,6 +134,27 @@ func _test_flood_fill() -> void:
 	# 锁定拒绝
 	doc.set_layer_property("ground", "locked", true)
 	_check(doc.flood_fill("ground", Vector2i(0, 0), "x").is_empty(), "锁定层拒绝油漆桶")
+	doc.set_layer_property("ground", "locked", false)
+
+func _test_replace_asset() -> void:
+	var doc := MapDocument.new()
+	doc.set_tile("ground", Vector2i(0, 0), "grass")
+	doc.set_tile("ground", Vector2i(1, 0), "grass")
+	doc.set_tile("terrain", Vector2i(0, 1), "grass") # 另一层同素材
+	doc.set_tile("ground", Vector2i(2, 0), "road") # 不受影响
+	var id1 := doc.add_object({"asset_id": "grass", "layer": "deco"})
+	var id2 := doc.add_object({"asset_id": "tree", "layer": "deco"})
+	var replaced: Dictionary = doc.replace_asset("grass", "floor")
+	_check((replaced["tile_entries"] as Array).size() == 3, "方块跨层替换 3 处")
+	_check((replaced["object_entries"] as Array).size() == 1, "物件替换 1 件")
+	_check(doc.get_tile("terrain", Vector2i(0, 1))["asset_id"] == "floor", "跨层已替换")
+	_check(doc.get_tile("ground", Vector2i(2, 0))["asset_id"] == "road", "其他素材不动")
+	_check(doc.get_object(id1)["asset_id"] == "floor" and doc.get_object(id2)["asset_id"] == "tree", "物件按素材精确替换")
+	# 锁定层跳过
+	doc.set_layer_property("ground", "locked", true)
+	doc.set_tile("ground", Vector2i(5, 5), "oldx")
+	var r2: Dictionary = doc.replace_asset("oldx", "newx")
+	_check((r2["tile_entries"] as Array).is_empty(), "锁定层跳过替换")
 	doc.set_layer_property("ground", "locked", false)
 
 func _test_line_cells() -> void:
