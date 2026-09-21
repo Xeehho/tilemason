@@ -19,11 +19,14 @@ const TOOLS: Array = [
 	{"id": "redo", "icon": "redo", "hint": "重做 Ctrl+Y"},
 ]
 
-var _buttons := {} # tool_id -> TextureButton
+const SEL_BG := Color(0.30, 0.27, 0.10) ## 选中底色（深金调）
+const SEL_BORDER := Color(0.98, 0.80, 0.35)
+
+var _buttons := {} # tool_id -> Button（icon 模式，可挂选中背景框）
 var _active := "pen"
 
 func setup() -> void:
-	custom_minimum_size = Vector2(0, 44)
+	custom_minimum_size = Vector2(0, 46)
 	for child in get_children():
 		child.queue_free()
 	_buttons.clear()
@@ -38,23 +41,37 @@ func setup() -> void:
 	margin.add_child(row)
 	for tool in TOOLS:
 		var t: Dictionary = tool
-		var btn := TextureButton.new()
+		var btn := Button.new()
 		var tex: Texture2D = load(ICON_DIR + "/" + str(t["icon"]) + ".png")
 		if tex != null:
-			btn.texture_normal = tex
-			btn.custom_minimum_size = Vector2(36, 36)
-			btn.stretch_mode = TextureButton.STRETCH_KEEP_CENTERED
-		else:
-			btn.custom_minimum_size = Vector2(36, 36) # 图标缺失兜底：空白占位
+			btn.icon = tex
+			btn.expand_icon = true
+		btn.custom_minimum_size = Vector2(40, 38)
 		btn.tooltip_text = str(t["hint"])
 		btn.pressed.connect(func() -> void: tool_requested.emit(str(t["id"])))
 		_buttons[str(t["id"])] = btn
 		row.add_child(btn)
 	set_active("pen")
 
-## 当前工具高亮（其余恢复常态）
+## 选中样式：明显的深金底+亮金描边圆角框（一眼可见），未选中恢复透明常态
 func set_active(tool_id: String) -> void:
 	_active = tool_id
 	for id in _buttons.keys():
-		var btn: TextureButton = _buttons[id]
-		btn.modulate = Color(1.0, 0.85, 0.4) if str(id) == tool_id else Color.WHITE
+		var btn: Button = _buttons[id]
+		if str(id) == tool_id:
+			var sel := StyleBoxFlat.new()
+			sel.bg_color = SEL_BG
+			sel.border_color = SEL_BORDER
+			sel.set_border_width_all(2)
+			sel.set_corner_radius_all(6)
+			sel.content_margin_left = 6
+			sel.content_margin_right = 6
+			btn.add_theme_stylebox_override("normal", sel)
+			btn.add_theme_stylebox_override("hover", sel)
+			btn.add_theme_stylebox_override("pressed", sel)
+			btn.modulate = Color.WHITE
+		else:
+			btn.add_theme_stylebox_override("normal", null)
+			btn.add_theme_stylebox_override("hover", null)
+			btn.add_theme_stylebox_override("pressed", null)
+			btn.modulate = Color(0.85, 0.87, 0.9)
