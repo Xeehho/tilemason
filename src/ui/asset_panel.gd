@@ -24,6 +24,7 @@ var _buttons := {} # asset_id -> TextureButton（当前分类网格内的按钮�
 var _search_box: LineEdit # 搜索框（过滤当前分类，§6.1 搜索）
 var _recent_ids: Array = [] # 最近使用（虚拟分类「最近」）
 var _favorite_ids: Array = [] # 收藏（虚拟分类「★收藏」，F 键切换）
+var _tag_ids := {} # 标签反向索引 {tag: [asset_id]}（虚拟分类「#标签」）
 var _thumbs := {} # asset_id -> ImageTexture（整数倍缩放后的缩略图）
 
 ## 外部指定选中（吸管等入口）：切换到对应分类并高亮（会发 asset_selected 信号）
@@ -116,8 +117,11 @@ func _rebuild_category_list() -> void:
 	if not _favorite_ids.is_empty():
 		_category_list.add_item("★收藏")
 		_category_list.set_item_metadata(_category_list.item_count - 1, "__fav")
+	for tag in _tag_ids.keys(): # 标签虚拟分类（每个标签一条）
+		_category_list.add_item("#%s" % str(tag))
+		_category_list.set_item_metadata(_category_list.item_count - 1, "__tag:" + str(tag))
 	var categories: Array = _library.get_categories() if _library != null else []
-	if categories.is_empty() and _recent_ids.is_empty() and _favorite_ids.is_empty():
+	if categories.is_empty() and _recent_ids.is_empty() and _favorite_ids.is_empty() and _tag_ids.is_empty():
 		_empty_hint.text = "未找到素材包\n可将自己的素材包放入\nassets/packs/ 目录"
 		_empty_hint.visible = true
 		return
@@ -147,6 +151,11 @@ func set_recent(ids: Array) -> void:
 	_rebuild_category_list()
 
 ## 外部注入收藏清单（虚拟分类「★收藏」内容）
+## 注入标签反向索引（每个 #标签 一条虚拟分类）
+func set_tags(tag_index: Dictionary) -> void:
+	_tag_ids = tag_index.duplicate()
+	_rebuild_category_list()
+
 func set_favorites(ids: Array) -> void:
 	_favorite_ids = ids.duplicate()
 	_rebuild_category_list()
@@ -160,9 +169,15 @@ func _on_category_selected(index: int) -> void:
 	_buttons.clear()
 	var category := str(_category_list.get_item_metadata(index))
 	var assets: Array
-	if category == "__recent" or category == "__fav":
+	if category == "__recent" or category == "__fav" or category.begins_with("__tag:"):
 		# 虚拟分类：按记录顺序映射素材（失效 id 过滤）
-		var ids := _recent_ids if category == "__recent" else _favorite_ids
+		var ids: Array
+		if category == "__recent":
+			ids = _recent_ids
+		elif category == "__fav":
+			ids = _favorite_ids
+		else:
+			ids = _tag_ids.get(category.substr("__tag:".length()), [])
 		for id in ids:
 			var asset := _library.get_asset(str(id))
 			if not asset.is_empty():

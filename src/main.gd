@@ -43,6 +43,9 @@ var _footprint_demo_lock := false ## 截图取证：锁定固定范围框，跳�
 var _bucket_mode := false ## G 键油漆桶（design.md §2.2）：左键填充连通同素材区域
 var _current_prefab := "" ## 当前预制件名（Ctrl+P 保存并选定、P 放置）
 var _prefab_panel: PrefabPanel ## 预制件面板（列表/选用/删除）
+var _tags := {} ## 素材标签表 {asset_id: [tag...]}（T 键编辑，user://tags.json）
+var _tag_input_mode := false ## T 键标签输入模式（状态栏输入行，Enter/Esc）
+var _tag_input_text := "" ## 输入缓冲
 var _hotbar: Hotbar ## 底部快捷栏（design.md §6.2）
 var _recent: Array = [] ## 最近使用素材 id（新选中的排最前）
 var _favorites: Array = [] ## 收藏素材 id
@@ -83,6 +86,8 @@ func _ready() -> void:
 	_build_asset_panel()
 	_panel.set_recent(_recent)
 	_panel.set_favorites(_favorites)
+	_tags = TagStore.load_all()
+	_panel.set_tags(TagStore.reverse_index(_tags))
 
 	# 启动自动恢复：手动档优先，手动档丢失时从自动保存档兜底（design.md §10 恢复上一版本最小版）
 	if FileAccess.file_exists(MAP_PATH):
@@ -161,6 +166,20 @@ func _mouse_over_panel() -> bool:
 
 ## 左键=放置（方块按住拖刷、物件单击），右键=吸管（design.md §6.3）
 func _unhandled_input(event: InputEvent) -> void:
+	# 标签输入模式：吞掉一切输入，只响应字符/退格/回车/Esc（design.md §6.1 标签）
+	if _tag_input_mode and event is InputEventKey and event.pressed and not event.echo:
+		var k := event as InputEventKey
+		if k.keycode == KEY_ESCAPE:
+			_exit_tag_input()
+		elif k.keycode == KEY_ENTER or k.keycode == KEY_KP_ENTER:
+			_commit_tag_input()
+		elif k.keycode == KEY_BACKSPACE:
+			_tag_input_text = _tag_input_text.substr(0, _tag_input_text.length() - 1)
+			refresh_tag_input()
+		elif k.unicode >= 32:
+			_tag_input_text += char(k.unicode)
+			refresh_tag_input()
+		return # 输入态不透传其他快捷键
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT:
@@ -228,6 +247,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_toggle_favorite()
 		elif key.keycode == KEY_R and not key.ctrl_pressed:
 			_batch_replace_under_mouse()
+		elif key.keycode == KEY_T and not key.ctrl_pressed:
+			_begin_tag_input()
 		elif key.keycode == KEY_TAB:
 			_panel.visible = not _panel.visible # design.md §6.3 Tab 显隐素材库
 			print("[TileMason] 素材面板：%s" % ("显示" if _panel.visible else "隐藏（Tab 再显）"))
@@ -811,6 +832,32 @@ func _save_prefab_from_selection() -> void:
 		f.store_string(name)
 	_prefab_panel.refresh(_current_prefab)
 	print("[TileMason] 已存预制件「%s」：%d 方块 %d 物件（P 键放置到鼠标处）" % [name, (snapshot["tiles"] as Array).size(), (snapshot["objects"] as Array).size()])
+
+## T 键：进入标签输入模式（对当前选中素材；状态栏即输入行）
+func _begin_tag_input() -> void:
+	if _selected_asset_id.is_empty():
+		print("[TileMason] 标签：先选中一个素材（右侧面板/快捷栏/吸管）")
+		return
+	_tag_input_mode = true
+	var current: Array = _tags.get(_selected_asset_id, [])
+	_tag_input_text = "，".join(PackedStringArray(current))
+	refresh_tag_input()
+
+func refresh_tag_input() -> void:
+	_status.set_line("标签（%s）：%s ｜ Enter 保存 · Esc 取消 · 退格删字（逗号/空格分隔多个）" % [_library.get_asset(_selected_asset_id).get("name", ""), _tag_input_text])
+
+func _commit_tag_input() -> void:
+	var parsed := TagStore.parse_input(_tag_input_text)
+	_tags = TagStore.set_tags(_tags, _selected_asset_id, parsed)
+	TagStore.save_all(_tags)
+	_panel.set_tags(TagStore.reverse_index(_tags))
+	_exit_tag_input()
+	print("[TileMason] 已保存标签：%s → %s" % [_selected_asset_id, str(parsed)])
+
+func _exit_tag_input() -> void:
+	_tag_input_mode = false
+	_tag_input_text = ""
+	refresh_status()
 
 ## 面板选用预制件为当前件
 func _choose_prefab(name: String) -> void:
