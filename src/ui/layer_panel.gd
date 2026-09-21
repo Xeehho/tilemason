@@ -45,8 +45,15 @@ func _make_row(layer: Dictionary) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 
+	# 内容计数：该层方块/物件数量（地图规模一眼可见）
+	var tile_count := _document.get_tile_count(str(layer["id"]))
+	var obj_count := _document.get_objects_on_layer(str(layer["id"])).size()
+	var count_hint := ""
+	if tile_count > 0 or obj_count > 0:
+		count_hint = "  %d格/%d件" % [tile_count, obj_count]
+
 	var visible_box := CheckBox.new()
-	visible_box.text = str(layer["name"])
+	visible_box.text = str(layer["name"]) + count_hint
 	visible_box.button_pressed = bool(layer.get("visible", true))
 	visible_box.tooltip_text = "显示/隐藏该图层"
 	visible_box.toggled.connect(func(on: bool) -> void:

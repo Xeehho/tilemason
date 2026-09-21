@@ -238,6 +238,10 @@ func get_tile_coords(layer_id: String) -> Array:
 		return []
 	return (_tiles[layer_id] as Dictionary).keys()
 
+## 某层方块数量（图层面板计数用）
+func get_tile_count(layer_id: String) -> int:
+	return get_tile_coords(layer_id).size()
+
 ## 文档是否已有内容（任意 tile 层有方块或存在任何物件）
 func has_content() -> bool:
 	for layer_id in _tiles.keys():
