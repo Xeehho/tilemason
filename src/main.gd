@@ -798,7 +798,11 @@ func _save_prefab_from_selection() -> void:
 ## 放置当前预制件：整组落到鼠标格（左上角对齐），单命令可撤销（复用粘贴模式）
 func _place_current_prefab() -> void:
 	if _current_prefab.is_empty():
-		print("[TileMason] 预制件：还没有保存过（选择内容后 Ctrl+P）")
+		var names := Prefab.list_names()
+		if names.is_empty():
+			print("[TileMason] 预制件：还没有保存过（选择内容后 Ctrl+P）")
+		else:
+			print("[TileMason] 预制件：未选定当前件。已存：%s（重按 Ctrl+P 覆盖更新同名件）" % "、".join(PackedStringArray(names)))
 		return
 	var snap := Prefab.load_prefab(_current_prefab)
 	if snap.is_empty():
