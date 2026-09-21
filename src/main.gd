@@ -816,6 +816,14 @@ func _select_all() -> void:
 
 ## 导出地图（design.md §10/P4）：Ctrl+E 场景导出（形态A）+ JSON 导出
 func _export_map() -> void:
+	# 导出前检查（design.md §10：导出前检查素材路径与资源完整性——此处接入地图检查汇总）
+	var issues := MapChecker.check_all(_document, _library)
+	if issues.is_empty():
+		print("[TileMason] [导出] 导出前检查通过：道路连通、无堵路、无孤立区、无碰撞重叠")
+	else:
+		for issue in issues:
+			print("[TileMason] [导出][检查] %s" % str((issue as Dictionary).get("message", issue)))
+		print("[TileMason] [导出] 检查发现 %d 项问题（继续导出，请复核）" % issues.size())
 	var result: Dictionary = SceneExporter.export_scene(_document, _library)
 	for w in result.get("warnings", []):
 		print("[TileMason] [导出] %s" % str(w))

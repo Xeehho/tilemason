@@ -14,6 +14,7 @@ func _init() -> void:
 	var lib := AssetLibrary.new()
 	lib.scan([FIXTURE_ROOT])
 	var doc := _build_doc()
+	doc.update_object(1, {"interaction_offset": Vector2i(1, -1)}) # 交互锚点偏移测试
 	var result: Dictionary = SceneExporter.export_scene(doc, lib, "probe_map")
 	_check(bool(result.get("ok", false)), "导出成功")
 	if not result.get("ok", false):
@@ -45,6 +46,24 @@ func _init() -> void:
 		if props_layer != null:
 			_check(props_layer.y_sort_enabled, "物件层 y_sort 开启")
 			_check(props_layer.get_cell_source_id(Vector2i(2, 5)) != -1, "物件格已注册 scene tile")
+		# 交互锚点：Anchor_1 存在于 InteractionAnchors，位置=底边中心(56,96)+偏移(16,-16)
+		var anchors := inst.get_node_or_null("InteractionAnchors")
+		_check(anchors != null and anchors.get_child_count() == 1, "交互锚点容器+单锚点")
+		if anchors != null and anchors.get_child_count() > 0:
+			var marker := anchors.get_child(0) as Marker2D
+			# cell(2,5) 3×3 件：底边中心=(2*16+24, 5*16+48)=(56,128)；+偏移(16,-16)=(72,112)
+			_check(marker.name == "Anchor_1" and marker.position == Vector2(72, 112), "锚点命名=物件 id、位置=底边中心+交互偏移")
+		# 件场景形态A 几何回归（直接实例化 prop 场景断言配方）
+		var prop_scene: PackedScene = load(SceneExporter.EXPORT_DIR + "/prop_se_props_house_png.tscn")
+		_check(prop_scene != null, "件场景可独立回载")
+		if prop_scene != null:
+			var prop := prop_scene.instantiate()
+			var sprite := prop.get_node_or_null("Sprite") as Sprite2D
+			_check(sprite != null and sprite.offset == Vector2(0, -24.0), "Sprite offset=-h/2（48px 件=-24，根=底边中心）")
+			var body := prop.get_node_or_null("Body/Shape") as CollisionShape2D
+			var rect_shape := (body.shape as RectangleShape2D) if body != null else null
+			_check(rect_shape != null and rect_shape.size == Vector2(48, 16), "碰撞=底边脚印 48×min(48,16)")
+			prop.free()
 		inst.free()
 	_finish()
 

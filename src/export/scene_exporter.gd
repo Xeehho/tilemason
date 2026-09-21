@@ -66,10 +66,30 @@ static func export_scene(doc: MapDocument, lib: AssetLibrary, file_name := "map"
 		props.set_cell(o["cell"] as Vector2i, 0, Vector2i(int(_scene_tile_cache[asset_id]), 0)) # scene tile id 编码进 atlas 坐标位
 		prop_count += 1
 
+	# ---- 交互锚点（design.md §9.2/§11 P4）：每物件一个 Marker2D，命名=物件 id，
+	# 位置=占格底边中心 + interaction_offset（供运行时 NPC/任务定位）----
+	var anchors := Node2D.new()
+	anchors.name = "InteractionAnchors"
+	root.add_child(anchors)
+	for obj in doc.get_objects():
+		var o := obj as Dictionary
+		var asset := lib.get_asset(str(o["asset_id"]))
+		var cells: Vector2i = Vector2i.ONE if asset.is_empty() else asset["cells"]
+		var marker := Marker2D.new()
+		marker.name = "Anchor_%d" % int(o["id"])
+		var tl: Vector2i = o["cell"]
+		marker.position = Vector2(
+			float(tl.x) * doc.grid_px + cells.x * doc.grid_px / 2.0,
+			float(tl.y) * doc.grid_px + cells.y * doc.grid_px) + Vector2(o.get("interaction_offset", Vector2i.ZERO) as Vector2i) * doc.grid_px
+		anchors.add_child(marker)
+
 	# ---- 打包（pitfall 19：pack 前全子树 owner=root）----
 	sort_root.owner = root
 	ground.owner = root
 	props.owner = root
+	anchors.owner = root
+	for marker in anchors.get_children():
+		(marker as Node2D).owner = root
 	var packed := PackedScene.new()
 	if packed.pack(root) != OK:
 		root.free()
@@ -117,11 +137,14 @@ static func _save_prop_scene(tex: Texture2D, asset_id: String) -> String:
 	var root := Node2D.new()
 	root.name = "Prop"
 	var sprite := Sprite2D.new()
+	sprite.name = "Sprite" # 显式命名防 pack 自动改名（@Name@N 现象）
 	sprite.texture = tex
 	sprite.offset = Vector2(0, -tex.get_height() / 2.0) # 根在底边中心
 	root.add_child(sprite)
 	var body := StaticBody2D.new()
+	body.name = "Body"
 	var shape := CollisionShape2D.new()
+	shape.name = "Shape"
 	var rect := RectangleShape2D.new()
 	rect.size = Vector2(tex.get_width(), mini(tex.get_height(), 16.0)) # 底边脚印：宽×min(件高,格高)
 	shape.shape = rect
