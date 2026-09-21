@@ -74,6 +74,14 @@ func _test_canvas_region(img: Image) -> void:
 	_check(road > 40, "画布区出现道路（道路灰像素 %d > 40）" % road)
 	var roof := _count_region(img, 0, panel_left, Color("8b3a2f"))
 	_check(roof > 40, "画布区出现建筑屋顶（砖红像素 %d > 40）" % roof)
+	# 占格范围框：截图模式在世界 (256,256) 固定画 96×96 绿框 → 屏幕 (1056..1152, 706..802)
+	var green := 0
+	for y in range(695, 815):
+		for x in range(1045, 1165):
+			var p := img.get_pixel(x, y)
+			if p.g > 0.5 and p.g - p.r > 0.2 and p.g - p.b > 0.12:
+				green += 1
+	_check(green > 15, "占格范围框可见（固定取样区绿色像素 %d > 15）" % green)
 
 func _count_region(img: Image, x0: int, x1: int, color: Color) -> int:
 	var count := 0

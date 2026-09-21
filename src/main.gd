@@ -34,6 +34,8 @@ var _erase_layer := ""
 var _recting := false ## 矩形填充拖框进行中（Ctrl+左键，design.md §2.2/§6.3）
 var _rect_start := Vector2i.ZERO
 var _rect_preview: RectPreview
+var _footprint_preview: RectPreview ## 占格范围框（多格物件预览时显示覆盖区域，design.md §4/§8）
+var _footprint_demo_lock := false ## 截图取证：锁定固定范围框，跳过 _process 的鼠标跟随
 var _selection := Selection.new() ## 选区（S 选择模式）
 var _select_mode := false ## S 键切换：框选/移动物件（design.md §2.1/§7）
 var _marqueeing := false ## 框选拖动进行中
@@ -88,32 +90,46 @@ func _ready() -> void:
 	_rect_preview.z_index = 60
 	add_child(_rect_preview)
 
+	_footprint_preview = RectPreview.new()
+	_footprint_preview.z_index = 59 # 在预览 Sprite 之下、画布内容之上
+	_footprint_preview.modulate = Color(0.35, 1.0, 0.45) # 绿色系：范围提示，与白色矩形工具区分
+	add_child(_footprint_preview)
+
 	print("[TileMason] 编辑器骨架启动：grid=%dpx，文档 %d 层就绪，素材 %d 项；滚轮缩放，中键/空格+左键平移，面板选素材左键放置/拖刷，右键吸管，E 橡皮擦，Ctrl+Z/Y 撤销重做" % [DEFAULT_GRID, _document.layer_count(), asset_count])
 
 	if OS.get_cmdline_user_args().has("--screenshot"):
 		_capture_screenshot() # 无人值守视觉取证：摆样 + 延时截屏后退出
 
 ## 半透明预览：跟随鼠标展示选中素材落点（面板区域内/橡皮擦模式下隐藏）
+## 多格物件同时显示占格范围框（design.md §4 覆盖关系 / §8 占用格范围）
 func _process(_delta: float) -> void:
+	if _footprint_demo_lock:
+		return # 截图取证模式：范围框由 _capture_screenshot 固定控制
 	if _eraser_mode or _selected_asset_id.is_empty() or _panel == null or _mouse_over_panel():
 		_preview.visible = false
+		_footprint_preview.visible = false
 		return
 	var asset := _library.get_asset(_selected_asset_id)
 	var tex := _library.load_texture(_selected_asset_id)
 	if asset.is_empty() or tex == null:
 		_preview.visible = false
+		_footprint_preview.visible = false
 		return
 	_preview.texture = tex
 	var cell := mouse_cell()
 	if AssetLibrary.TILE_CATEGORIES.has(str(asset["category"])):
 		_preview.centered = false
 		_preview.position = Vector2(cell) * DEFAULT_GRID
+		_footprint_preview.visible = false # 单格方块无需范围框
 	else:
 		var cells: Vector2i = asset["cells"]
 		# 预览与放置共用同一几何：鼠标格=占格底边中心（修复图影与落点不一致）
 		var cell_tl := MapView.footprint_cell_tl(cells, cell)
 		_preview.centered = true
 		_preview.position = MapView.object_sprite_position(cell_tl, cells, DEFAULT_GRID, tex.get_height())
+		# 范围框与预览同步：覆盖整个占格区域（左上角锚矩形）
+		_footprint_preview.set_rect_px(Rect2(Vector2(cell_tl) * DEFAULT_GRID, Vector2(cells) * DEFAULT_GRID))
+		_footprint_preview.visible = true
 	_preview.visible = true
 
 func _mouse_over_panel() -> bool:
@@ -1025,6 +1041,10 @@ func _capture_screenshot() -> void:
 	# 选中建筑并把鼠标移到画布空位：截图中展示半透明放置预览
 	_selected_asset_id = "demo/props/house.png"
 	get_viewport().warp_mouse(Vector2(150, 330))
+	# 确定性取证：warp 在后台窗口下不稳定，固定画一个范围框（世界 256,256 起占 6×6 格）
+	_footprint_demo_lock = true
+	_footprint_preview.set_rect_px(Rect2(256, 256, 96, 96))
+	_footprint_preview.visible = true
 	await get_tree().create_timer(1.2).timeout
 	var img := get_viewport().get_texture().get_image()
 	img.save_png("user://screenshot_editor.png")
