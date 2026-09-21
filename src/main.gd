@@ -255,6 +255,21 @@ func _unhandled_input(event: InputEvent) -> void:
 			_mirror_selected()
 		elif key.keycode == KEY_F9:
 			_run_map_check()
+		elif key.keycode == KEY_F8:
+			_show_connection_rules()
+
+## F8：连接规则查看（design.md §2.2 只读版，P3）——弹窗展示素材包声明的连接规则
+func _show_connection_rules() -> void:
+	var viewer := ConnectionRulesViewer.new()
+	viewer.setup(_library)
+	viewer.confirmed.connect(func() -> void: viewer.queue_free())
+	viewer.close_requested.connect(func() -> void: viewer.queue_free())
+	add_child(viewer)
+	viewer.popup_centered(Vector2i(620, 520))
+	var declared := 0
+	for rule in viewer.rules:
+		declared += ((rule as Dictionary)["assets"] as Array).size()
+	print("[TileMason] 连接规则查看：%d 个分类、%d 件声明连接素材" % [viewer.rules.size(), declared])
 
 ## F9：导出前地图检查（design.md §8 最小版，验收 9）
 func _run_map_check() -> void:
