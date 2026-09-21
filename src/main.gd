@@ -1154,7 +1154,7 @@ func _place_asset(asset: Dictionary, cell: Vector2i) -> void:
 		print("[TileMason] 图层已锁定，无法放置：%s" % layer_id)
 		return
 	var asset_id := str(asset["id"])
-	var ctx := {} # 引用容器：do/undo 间共享旧值/新对象（dev-pitfalls 11）
+	var ctx := {} # 引用容器：do/undo 间共享旧值/新对象（dev-pitfalls 12）
 	if AssetLibrary.TILE_CATEGORIES.has(category):
 		var old: Variant = _document.set_tile(layer_id, cell, asset_id)
 		if old == null:

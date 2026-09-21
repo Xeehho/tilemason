@@ -168,7 +168,7 @@ func _test_line_cells() -> void:
 
 func _test_command_stack() -> void:
 	var stack := CommandStack.new()
-	var log_arr: Array = [] # 引用容器：闭包内外共享（dev-pitfalls 11）
+	var log_arr: Array = [] # 引用容器：闭包内外共享（dev-pitfalls 12）
 	stack.push("a",
 		func() -> void: log_arr.append("do_a"),
 		func() -> void: log_arr.append("undo_a"))

@@ -2,7 +2,7 @@ class_name AssetLibrary
 extends RefCounted
 ## 素材库数据层（design.md §6.1 + assets/packs/README.md 包结构约定）
 ## 扫描素材包根目录 → 解析 pack.json 清单 → 分类索引 + 图像/纹理缓存
-## PNG 一律 Image.load_from_file + 内存缓存（dev-pitfalls 20），禁用 load()
+## PNG 一律 Image.load_from_file + 内存缓存（dev-pitfalls 21），禁用 load()
 ## 面板 UI 与缩略图展示在 demo 素材里程碑接入（无素材时 UI 无法实测）
 
 ## 分类全集（design.md §6.1，UI 面板按此排序）
@@ -94,7 +94,7 @@ func load_image(asset_id: String) -> Image:
 	if not FileAccess.file_exists(str(asset["path"])):
 		push_warning("[TileMason] load_image：文件不存在 %s" % str(asset["path"]))
 		return null
-	var img := Image.load_from_file(abs_path) # 静态方法，失败返回 null（dev-pitfalls 20）
+	var img := Image.load_from_file(abs_path) # 静态方法，失败返回 null（dev-pitfalls 21）
 	if img == null:
 		push_warning("[TileMason] load_image：读取失败 %s" % str(asset["path"]))
 		return null
@@ -178,7 +178,7 @@ func load_image_by_path(path: String) -> Image:
 	var abs_path := ProjectSettings.globalize_path(path)
 	if _images.has(abs_path):
 		return _images[abs_path]
-	var img := Image.load_from_file(abs_path) # 静态方法，失败返回 null（dev-pitfalls 20）
+	var img := Image.load_from_file(abs_path) # 静态方法，失败返回 null（dev-pitfalls 21）
 	if img == null:
 		return null
 	_images[abs_path] = img

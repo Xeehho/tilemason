@@ -39,7 +39,7 @@ CI 在 push/PR 自动跑同样三道关。**禁止目测估框：改动效果必
 
 ## 引擎陷阱
 
-改代码前先扫一遍 [docs/dev-pitfalls.md](docs/dev-pitfalls.md)（Godot 4.6 语法/对象/TileMap/导出四类 25 条），能避开绝大多数返工。
+改代码前先扫一遍 [docs/dev-pitfalls.md](docs/dev-pitfalls.md)（Godot 4.6 语法/对象/TileMap/导出四类 26 条），能避开绝大多数返工。
 
 ## 本地工作流（ZCode 会话 · 全自动无人值守）
 

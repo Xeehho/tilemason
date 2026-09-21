@@ -2,7 +2,7 @@ class_name MapView
 extends Node2D
 ## 地图视图：把 MapDocument 数据渲染到画布（P0：每格/每物件一个 Sprite2D，轻量可替换）
 ## 像素纪律：1:1 原生尺寸 + 最近邻过滤（本节点设置后子节点继承），禁任意缩放
-## 注：形态A TileMapLayer 配方（dev-pitfalls 21）为 P4 运行时导出目标；
+## 注：形态A TileMapLayer 配方（dev-pitfalls 22）为 P4 运行时导出目标；
 ##     编辑器画布先用 Sprite 渲染，数据模型不变，后续可整体替换渲染层
 
 const OBJECT_Z := 10 ## 物件层基准 z（整体在 tile 层之上，同层内 y-sort）

@@ -2,7 +2,7 @@ class_name CommandStack
 extends RefCounted
 ## 命令栈基础：撤销/重做地基（design.md §6.3 Ctrl+Z / Ctrl+Y）
 ## 命令 = {name, do, undo} 一对 Callable；push 立即执行 do，撤销/重做由栈驱动
-## 注意（dev-pitfalls 11）：Callable 捕获本地变量是值拷贝，
+## 注意（dev-pitfalls 12）：Callable 捕获本地变量是值拷贝，
 ## do/undo 之间共享状态必须用 Dictionary/Array 等引用容器传递
 
 signal changed(can_undo: bool, can_redo: bool)
