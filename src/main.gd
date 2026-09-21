@@ -1300,14 +1300,31 @@ func _toggle_eraser() -> void:
 	print("[TileMason] 橡皮擦模式：%s" % ("开（左键/右键/拖动清除当前层，E 关闭）" if _eraser_mode else "关"))
 	refresh_status()
 
-## 当前层：选中素材分类路由的图层；未选中默认地面层
+## 橡皮擦目标层（用户实测反馈 2026-09-21：选中长安素材[全 building 类]后擦不掉
+## demo 道路[road 层]——按选中素材路由层，用户看不到擦除发生）：
+## ① 活动层（用户显式点名）② 鼠标格可见内容的最上层（所见即所擦，直觉优先）
+## ③ 选中素材的目标层（原语义降为兜底）④ ground
 func _eraser_layer() -> String:
+	var active := _layer_panel.active_layer()
+	if not active.is_empty():
+		return active
+	var probe := mouse_cell()
+	var layers: Array = _document.get_layers()
+	for i in range(layers.size() - 1, -1, -1): # 末层=最高层级，自上而下找首个有内容的
+		var layer: Dictionary = layers[i]
+		var lid := str(layer["id"])
+		if _document.is_layer_locked(lid) or not bool(layer.get("visible", true)):
+			continue
+		if str(layer["type"]) == "object":
+			if _view.pick_object_on_layer(lid, probe) >= 0:
+				return lid
+		elif not _document.get_tile(lid, probe).is_empty():
+			return lid
 	if not _selected_asset_id.is_empty():
 		var asset := _library.get_asset(_selected_asset_id)
 		if not asset.is_empty():
 			return _target_layer_for(str(asset["category"]))
-	var active := _layer_panel.active_layer()
-	return active if not active.is_empty() else "ground"
+	return "ground"
 
 func _begin_erase() -> void:
 	if _mouse_over_panel():
@@ -1450,6 +1467,8 @@ func _place_asset(asset: Dictionary, cell: Vector2i) -> void:
 			if not obj.is_empty():
 				_document.remove_object(int(obj["id"]), true)
 		_commands.push("放置 %s" % str(asset["name"]), do_add, undo_add)
+		var layer_name := str(_document.get_layer(layer_id).get("name", layer_id))
+		print("[TileMason] 已放置物件：%s → 「%s」层（物件不落格，Del/框选可删）" % [str(asset["name"]), layer_name])
 
 ## 顶部工具栏：左上角横排（当前工具图标高亮，反馈「按了键不知道在什么模式」的正解）
 func _build_toolbar() -> void:

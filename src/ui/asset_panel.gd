@@ -34,11 +34,11 @@ func select_asset(asset_id: String) -> void:
 		var asset := _library.get_asset(asset_id)
 		if asset.is_empty():
 			return
-		for i in _category_list.item_count:
-			if str(_category_list.get_item_metadata(i)) == str(asset["category"]):
-				_category_list.select(i)
-				_on_category_selected(i)
-				break
+		# 目标素材不在当前缩略图区：先切到它所属分类再选（三层树按 meta 遍历，
+		# 旧 item_count/get_item_metadata(index) 是 ItemList 残留 API，Tree 上会抛错中断选中）
+		var meta := str(asset["category"])
+		if _select_by_meta(_category_list.get_root(), meta):
+			_on_category_selected(meta)
 	var btn: TextureButton = _buttons.get(asset_id)
 	if btn != null:
 		_on_thumb_pressed(btn, asset_id)
