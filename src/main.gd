@@ -44,6 +44,7 @@ var _bucket_mode := false ## G 键油漆桶（design.md §2.2）：左键填充�
 var _current_prefab := "" ## 当前预制件名（Ctrl+P 保存并选定、P 放置）
 var _prefab_panel: PrefabPanel ## 预制件面板（列表/选用/删除）
 var _toolbar: Toolbar ## 顶部工具栏（当前工具高亮）
+var _app_theme: Theme ## 全局统一主题（零依赖自绘，挂各 UI 根）
 var _tags := {} ## 素材标签表 {asset_id: [tag...]}（T 键编辑，user://tags.json）
 var _tag_input_mode := false ## T 键标签输入模式（状态栏输入行，Enter/Esc）
 var _tag_input_text := "" ## 输入缓冲
@@ -72,6 +73,7 @@ var _line_sprites: Array = [] ## 直线预览 Sprite 池
 var _status: StatusBar ## 底部状态栏（当前工具/素材常驻可见）
 
 func _ready() -> void:
+	_app_theme = AppTheme.build() # 统一暗色主题（直接挂各 UI 根——root.theme 跨层传播实证不可靠）
 	var camera := EditorCamera.new()
 	add_child(camera) # 唯一相机自动接管视图
 
@@ -1134,6 +1136,7 @@ func _build_hotbar() -> void:
 	_hotbar.setup(_library, _hotbar_bindings)
 	_hotbar.slot_activated.connect(_hotbar_activate)
 	_hotbar.slot_customized.connect(_hotbar_customize)
+	_hotbar.theme = _app_theme
 	layer_ui.add_child(_hotbar)
 	_hotbar.anchor_left = 0.5
 	_hotbar.anchor_right = 0.5
@@ -1405,6 +1408,7 @@ func _build_toolbar() -> void:
 	_toolbar = Toolbar.new()
 	_toolbar.setup()
 	_toolbar.tool_requested.connect(_toolbar_action)
+	_toolbar.theme = _app_theme
 	layer_ui.add_child(_toolbar)
 	_toolbar.anchor_left = 0.0
 	_toolbar.anchor_right = 0.0
@@ -1478,6 +1482,7 @@ func _build_asset_panel() -> void:
 	_panel.setup(_library)
 	_panel.asset_selected.connect(_on_asset_selected)
 	_panel.rescan_requested.connect(_rescan_library)
+	_panel.theme = _app_theme
 	layer.add_child(_panel)
 	_panel.anchor_left = 1.0
 	_panel.anchor_right = 1.0
@@ -1497,6 +1502,7 @@ func _build_layer_panel() -> void:
 		layer_ui.layer = 10
 		add_child(layer_ui)
 		_layer_panel = LayerPanel.new()
+		_layer_panel.theme = _app_theme
 		layer_ui.add_child(_layer_panel)
 		_layer_panel.anchor_left = 0.0
 		_layer_panel.anchor_right = 0.0
@@ -1516,6 +1522,7 @@ func _build_layer_panel() -> void:
 	_prefab_panel.setup()
 	_prefab_panel.prefab_chosen.connect(_choose_prefab)
 	_prefab_panel.prefab_deleted.connect(_delete_prefab)
+	_prefab_panel.theme = _app_theme
 	pf_layer.add_child(_prefab_panel)
 	_prefab_panel.anchor_left = 0.0
 	_prefab_panel.anchor_right = 0.0
@@ -1551,6 +1558,7 @@ func _build_status_bar() -> void:
 	add_child(layer_ui)
 	_status = StatusBar.new()
 	_status.setup()
+	_status.theme = _app_theme
 	layer_ui.add_child(_status)
 	_status.anchor_left = 0.0
 	_status.anchor_right = 1.0
