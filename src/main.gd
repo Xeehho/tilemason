@@ -43,8 +43,10 @@ var _footprint_demo_lock := false ## 截图取证：锁定固定范围框，跳�
 var _bucket_mode := false ## G 键油漆桶（design.md §2.2）：左键填充连通同素材区域
 var _current_prefab := "" ## 当前预制件名（Ctrl+P 保存并选定、P 放置）
 var _prefab_panel: PrefabPanel ## 预制件面板（列表/选用/删除）
+var _layer_panel: LayerPanel ## 图层面板（载入新文档时重绑）
 var _toolbar: Toolbar ## 顶部工具栏（当前工具高亮）
 var _app_theme: Theme ## 全局统一主题（零依赖自绘，挂各 UI 根）
+var _shell: EditorShell ## 壳层（UI 重构阶段 A：容器布局替代绝对偏移）
 var _tags := {} ## 素材标签表 {asset_id: [tag...]}（T 键编辑，user://tags.json）
 var _tag_input_mode := false ## T 键标签输入模式（状态栏输入行，Enter/Esc）
 var _tag_input_text := "" ## 输入缓冲
@@ -84,6 +86,11 @@ func _ready() -> void:
 	var grid := GridOverlay.new()
 	grid.grid_size = DEFAULT_GRID
 	add_child(grid)
+
+	_shell = EditorShell.new()
+	_shell.setup()
+	_shell.theme = _app_theme
+	add_child(_shell)
 
 	var asset_count := _library.scan(AssetLibrary.default_roots())
 	_recent = _load_id_list(RECENT_PATH)
@@ -1126,9 +1133,6 @@ func _target_layer_for(category: String) -> String:
 
 ## 底部快捷栏（design.md §6.2）：居中悬于状态栏上方
 func _build_hotbar() -> void:
-	var layer_ui := CanvasLayer.new()
-	layer_ui.layer = 10
-	add_child(layer_ui)
 	var saved_bar := _load_id_list(HOTBAR_PATH)
 	if not saved_bar.is_empty():
 		_hotbar_bindings = saved_bar
@@ -1137,15 +1141,7 @@ func _build_hotbar() -> void:
 	_hotbar.slot_activated.connect(_hotbar_activate)
 	_hotbar.slot_customized.connect(_hotbar_customize)
 	_hotbar.theme = _app_theme
-	layer_ui.add_child(_hotbar)
-	_hotbar.anchor_left = 0.5
-	_hotbar.anchor_right = 0.5
-	_hotbar.anchor_top = 1.0
-	_hotbar.anchor_bottom = 1.0
-	_hotbar.offset_left = -250
-	_hotbar.offset_right = 250
-	_hotbar.offset_top = -84
-	_hotbar.offset_bottom = -30
+	_shell.mount_hotbar(_hotbar) # 壳层快捷栏安全区
 
 ## 槽位激活：0=橡皮常驻格，1-7=素材槽
 func _hotbar_activate(index: int) -> void:
@@ -1402,23 +1398,11 @@ func _place_asset(asset: Dictionary, cell: Vector2i) -> void:
 
 ## 顶部工具栏：左上角横排（当前工具图标高亮，反馈「按了键不知道在什么模式」的正解）
 func _build_toolbar() -> void:
-	var layer_ui := CanvasLayer.new()
-	layer_ui.layer = 10
-	add_child(layer_ui)
 	_toolbar = Toolbar.new()
 	_toolbar.setup()
 	_toolbar.tool_requested.connect(_toolbar_action)
 	_toolbar.theme = _app_theme
-	layer_ui.add_child(_toolbar)
-	_toolbar.anchor_left = 0.0
-	_toolbar.anchor_right = 0.0
-	_toolbar.anchor_top = 0.0
-	_toolbar.anchor_bottom = 0.0
-	_toolbar.offset_left = 200 # 让开左侧图层面板
-	_toolbar.offset_right = 660
-	_toolbar.offset_top = 4
-	_toolbar.offset_bottom = 48
-
+	_shell.mount_top(_toolbar) # 壳层顶栏安全区（阶段 A：容器布局替代绝对偏移）
 ## 工具栏点击 → 分发到既有模式切换；同时刷新高亮
 func _toolbar_action(tool_id: String) -> void:
 	match tool_id:
@@ -1475,64 +1459,28 @@ func _refresh_toolbar() -> void:
 
 ## 素材面板：右侧全高停靠（design.md §6.1 最小版）
 func _build_asset_panel() -> void:
-	var layer := CanvasLayer.new()
-	layer.layer = 10 # 画布之上、网格覆盖层(100)之下
-	add_child(layer)
 	_panel = AssetPanel.new()
 	_panel.setup(_library)
 	_panel.asset_selected.connect(_on_asset_selected)
 	_panel.rescan_requested.connect(_rescan_library)
 	_panel.theme = _app_theme
-	layer.add_child(_panel)
-	_panel.anchor_left = 1.0
-	_panel.anchor_right = 1.0
-	_panel.anchor_top = 0.0
-	_panel.anchor_bottom = 1.0
-	_panel.offset_left = -380
-	_panel.offset_right = 0
-	_panel.offset_top = 0
-	_panel.offset_bottom = 0
-
-var _layer_panel: LayerPanel ## 图层面板（载入新文档时重绑）
-
+	_shell.mount_right(_panel) # 壳层右 Dock
 ## 图层面板：左侧全高停靠（design.md §4 最小版：显示/锁定）
 func _build_layer_panel() -> void:
 	if _layer_panel == null:
-		var layer_ui := CanvasLayer.new()
-		layer_ui.layer = 10
-		add_child(layer_ui)
 		_layer_panel = LayerPanel.new()
-		_layer_panel.theme = _app_theme
-		layer_ui.add_child(_layer_panel)
-		_layer_panel.anchor_left = 0.0
-		_layer_panel.anchor_right = 0.0
-		_layer_panel.anchor_top = 0.0
-		_layer_panel.anchor_bottom = 1.0
-		_layer_panel.offset_left = 0
-		_layer_panel.offset_right = 190
-		_layer_panel.offset_top = 0
-		_layer_panel.offset_bottom = -224 # 给下方预制件面板让位
+	_layer_panel.theme = _app_theme
 	_layer_panel.setup(_document)
 	if not _layer_panel.layer_activity_requested.is_connected(_on_active_layer):
 		_layer_panel.layer_activity_requested.connect(_on_active_layer)
-	var pf_layer := CanvasLayer.new()
-	pf_layer.layer = 10
-	add_child(pf_layer)
-	_prefab_panel = PrefabPanel.new()
-	_prefab_panel.setup()
-	_prefab_panel.prefab_chosen.connect(_choose_prefab)
-	_prefab_panel.prefab_deleted.connect(_delete_prefab)
-	_prefab_panel.theme = _app_theme
-	pf_layer.add_child(_prefab_panel)
-	_prefab_panel.anchor_left = 0.0
-	_prefab_panel.anchor_right = 0.0
-	_prefab_panel.anchor_top = 1.0
-	_prefab_panel.anchor_bottom = 1.0
-	_prefab_panel.offset_left = 0
-	_prefab_panel.offset_right = 190
-	_prefab_panel.offset_top = -220
-	_prefab_panel.offset_bottom = -26 # 状态栏之上
-	_prefab_panel.refresh(_current_prefab)
+	_shell.mount_left_top(_layer_panel) # 壳层左 Dock 上槽
+	if _prefab_panel == null:
+		_prefab_panel = PrefabPanel.new()
+		_prefab_panel.setup()
+		_prefab_panel.prefab_chosen.connect(_choose_prefab)
+		_prefab_panel.prefab_deleted.connect(_delete_prefab)
+		_prefab_panel.refresh(_current_prefab)
+		_shell.mount_left_bottom(_prefab_panel) # 壳层左 Dock 下槽
 
 ## 重扫素材库（面板「⟳ 刷新」）：放文件后即时生效，无须重启
 func _rescan_library() -> void:
