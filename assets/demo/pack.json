@@ -67,6 +67,26 @@
 			"name": "店铺"
 		},
 		{
+			"category": "indoor",
+			"file": "tiles/floor_wood.png",
+			"name": "木地板"
+		},
+		{
+			"category": "indoor",
+			"file": "tiles/floor_tile.png",
+			"name": "地砖"
+		},
+		{
+			"category": "furniture",
+			"file": "props/table.png",
+			"name": "方桌"
+		},
+		{
+			"category": "furniture",
+			"file": "props/shelf.png",
+			"name": "货架"
+		},
+		{
 			"category": "stall",
 			"file": "props/stall_red.png",
 			"name": "摊位·食"

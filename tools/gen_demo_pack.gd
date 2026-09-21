@@ -46,6 +46,10 @@ func _init() -> void:
 	_gen_prop("props/house.png", _paint_house)
 	_gen_prop("props/house_shop.png", _paint_house_shop)
 	_gen_prop("props/stall_red.png", _paint_stall.bind(AWNING_A, STALL_GOODS_A))
+	_gen_tile("tiles/floor_wood.png", _paint_floor_wood)
+	_gen_tile("tiles/floor_tile.png", _paint_floor_tile)
+	_gen_prop("props/table.png", _paint_table)
+	_gen_prop("props/shelf.png", _paint_shelf)
 	_gen_prop("props/stall_green.png", _paint_stall.bind(Color("4f9a3a"), STALL_GOODS_B))
 	# 自动连接变体集：道路/墙各 15 种掩码（P2，design.md §2.2）
 	for mask in range(1, 16):
@@ -53,7 +57,7 @@ func _init() -> void:
 	for mask in range(1, 16):
 		_gen_tile("tiles/wall_v%d.png" % mask, _paint_wall_mask.bind(mask))
 	_write_manifest()
-	print("[TileMason] demo 素材包生成完毕：%s（42 件）" % ProjectSettings.globalize_path(OUT_DIR))
+	print("[TileMason] demo 素材包生成完毕：%s（46 件）" % ProjectSettings.globalize_path(OUT_DIR))
 	quit(0)
 
 func _prepare_dirs() -> void:
@@ -221,6 +225,42 @@ func _paint_wall_mask(img: Image, mask: int) -> void:
 	if not (mask & 2):
 		_rect(img, 14, 0, 2, 16, MORTAR)
 
+## 室内地板（16px，indoor 类）
+func _paint_floor_wood(img: Image) -> void:
+	for y in 16:
+		for x in 16:
+			_speckle(img, x, y, Color("9c7148"), Color("8a6240"), Color("ab8055"))
+	for x in 16: # 横向木板缝
+		img.set_pixel(x, 5, Color("6e4e33"))
+		img.set_pixel(x, 11, Color("6e4e33"))
+
+func _paint_floor_tile(img: Image) -> void:
+	_rect(img, 0, 0, 8, 8, Color("c8cdd4"))
+	_rect(img, 8, 0, 8, 8, Color("b8bec6"))
+	_rect(img, 0, 8, 8, 8, Color("b8bec6"))
+	_rect(img, 8, 8, 8, 8, Color("c8cdd4"))
+	_rect(img, 7, 0, 1, 16, Color("98a0aa"))
+	_rect(img, 0, 7, 16, 1, Color("98a0aa"))
+
+## 家具（48px，furniture 类）
+func _paint_table(img: Image) -> void:
+	_rect(img, 10, 18, 28, 12, Color("8a6b47")) # 桌面
+	_rect(img, 10, 18, 28, 2, Color("a08a6a"))
+	_rect(img, 13, 30, 4, 12, Color("6b4a2b")) # 桌腿
+	_rect(img, 31, 30, 4, 12, Color("6b4a2b"))
+	_rect(img, 18, 13, 8, 5, Color("c9b458")) # 桌上物
+
+func _paint_shelf(img: Image) -> void:
+	_rect(img, 12, 6, 24, 36, Color("7a5c3d")) # 架体
+	_rect(img, 12, 16, 24, 2, Color("5d4429")) # 隔板
+	_rect(img, 12, 26, 24, 2, Color("5d4429"))
+	_rect(img, 14, 9, 6, 6, Color("c94f4f")) # 货物
+	_rect(img, 24, 9, 6, 6, Color("8fb8d9"))
+	_rect(img, 15, 19, 5, 6, Color("8fb8d9"))
+	_rect(img, 23, 19, 5, 6, Color("c9b458"))
+	_rect(img, 17, 29, 6, 6, Color("c9b458"))
+	_rect(img, 26, 29, 6, 6, Color("c94f4f"))
+
 func _write_manifest() -> void:
 	var assets := [
 		{"file": "tiles/grass.png", "name": "草地", "category": "ground"},
@@ -233,6 +273,10 @@ func _write_manifest() -> void:
 		{"file": "props/tree_big.png", "name": "大树", "category": "tree"},
 		{"file": "props/house.png", "name": "民居", "category": "building"},
 		{"file": "props/house_shop.png", "name": "店铺", "category": "building"},
+		{"file": "tiles/floor_wood.png", "name": "木地板", "category": "indoor"},
+		{"file": "tiles/floor_tile.png", "name": "地砖", "category": "indoor"},
+		{"file": "props/table.png", "name": "方桌", "category": "furniture"},
+		{"file": "props/shelf.png", "name": "货架", "category": "furniture"},
 		{"file": "props/stall_red.png", "name": "摊位·食", "category": "stall"},
 		{"file": "props/stall_green.png", "name": "摊位·杂", "category": "stall"},
 	]
