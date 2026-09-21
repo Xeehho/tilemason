@@ -38,6 +38,7 @@ var _rect_start := Vector2i.ZERO
 var _rect_preview: RectPreview
 var _footprint_preview: RectPreview ## 占格范围框（多格物件预览时显示覆盖区域，design.md §4/§8）
 var _footprint_demo_lock := false ## 截图取证：锁定固定范围框，跳过 _process 的鼠标跟随
+var _bucket_mode := false ## G 键油漆桶（design.md §2.2）：左键填充连通同素材区域
 var _selection := Selection.new() ## 选区（S 选择模式）
 var _select_mode := false ## S 键切换：框选/移动物件（design.md §2.1/§7）
 var _marqueeing := false ## 框选拖动进行中
@@ -143,7 +144,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			if mb.pressed:
-				if _line_mode:
+				if _bucket_mode:
+					_do_bucket_fill(mouse_cell())
+				elif _line_mode:
 					_line_click(mouse_cell())
 				elif _select_mode:
 					_begin_select_action()
@@ -198,9 +201,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			_toggle_select_mode()
 		elif key.keycode == KEY_L and not key.ctrl_pressed:
 			_toggle_line_mode()
+		elif key.keycode == KEY_G and not key.ctrl_pressed:
+			_toggle_bucket_mode()
 		elif key.keycode == KEY_ESCAPE:
 			_exit_select_mode()
 			_exit_line_mode()
+			if _bucket_mode:
+				_toggle_bucket_mode()
 		elif key.ctrl_pressed and key.keycode == KEY_C:
 			_copy_selected()
 		elif key.ctrl_pressed and key.keycode == KEY_V:
@@ -733,6 +740,27 @@ func _select_all() -> void:
 				cells[layer_id] = coords
 	_apply_selection(ids, cells)
 
+## 油漆桶（design.md §2.2 油漆桶填充）：连通同素材区域整体替换，整段单命令
+func _toggle_bucket_mode() -> void:
+	_bucket_mode = not _bucket_mode
+	print("[TileMason] 油漆桶模式：%s" % ("开（左键点击填充连通区域）" if _bucket_mode else "关"))
+	refresh_status()
+
+func _do_bucket_fill(cell: Vector2i) -> void:
+	if _selected_asset_id.is_empty() or _mouse_over_panel():
+		return
+	var asset := _library.get_asset(_selected_asset_id)
+	if asset.is_empty() or not AssetLibrary.TILE_CATEGORIES.has(str(asset["category"])):
+		return
+	var layer_id: String = CATEGORY_TO_LAYER.get(str(asset["category"]), "ground")
+	var entries: Array = _document.flood_fill(layer_id, cell, str(asset["id"]))
+	if entries.is_empty():
+		return
+	var extras := {}
+	for e in entries:
+		_harvest_refresh(layer_id, (e as Dictionary)["cell"], extras)
+	_push_tile_command("油漆桶 %d 格" % entries.size(), layer_id, entries, extras, str(asset["id"]))
+
 ## 收集自动连接刷新变更（同格多次刷新保留最初旧值、最新新值）
 func _harvest_refresh(layer_id: String, cell: Vector2i, store: Dictionary) -> void:
 	if _document.is_layer_locked(layer_id):
@@ -995,6 +1023,8 @@ func refresh_status() -> void:
 	if _status == null:
 		return
 	var tool := "画笔（左键放置/拖刷，Shift 单块）"
+	if _bucket_mode:
+		tool = "油漆桶（左键填充连通同素材区域，G 退出）"
 	if _eraser_mode:
 		tool = "橡皮擦（清「%s」层，左键/拖动/E 退出）" % _eraser_layer_name()
 	elif _select_mode:

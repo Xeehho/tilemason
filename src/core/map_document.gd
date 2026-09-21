@@ -169,6 +169,42 @@ static func line_cells(from: Vector2i, to: Vector2i) -> Array:
 			y += sy
 	return cells
 
+## 油漆桶填充（design.md §2.2）：从 start 出发的 4 邻接连通区域内、
+## 与 start 格当前内容相同（同 asset_id 或同为空）的所有格整体替换；
+## 立即应用并返回变更记录 [{cell, old}]；层无效/锁定返回空，4096 格安全上限
+func flood_fill(layer_id: String, start: Vector2i, asset_id: String) -> Array:
+	var idx := _layer_index(layer_id)
+	if idx < 0 or _layers[idx]["type"] != "tile" or bool(_layers[idx].get("locked", false)):
+		push_warning("[TileMason] flood_fill：图层无效或已锁定 %s" % layer_id)
+		return []
+	var source := get_tile(layer_id, start)
+	var source_key := str(source.get("asset_id", "")) # 空=填充连通空区
+	var store := _ensure_tile_store(layer_id)
+	var visited := {}
+	var queue: Array = [start]
+	visited[start] = true
+	var region: Array = []
+	while not queue.is_empty():
+		var c: Vector2i = queue.pop_front()
+		var entry: Dictionary = store.get(c, {})
+		var is_empty := entry.is_empty()
+		if (source_key.is_empty() and not is_empty) or (not source_key.is_empty() and (is_empty or str(entry["asset_id"]) != source_key)):
+			continue # 内容不同：边界
+		region.append(c)
+		if region.size() >= 4096:
+			break
+		for dir in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var n: Vector2i = c + dir
+			if not visited.has(n):
+				visited[n] = true
+				queue.append(n)
+	var entries := []
+	for c in region:
+		var prev: Variant = set_tile(layer_id, c, asset_id)
+		if prev != null:
+			entries.append({"cell": c, "old": prev})
+	return entries
+
 func get_tile(layer_id: String, coords: Vector2i) -> Dictionary:
 	if not _tiles.has(layer_id):
 		return {}

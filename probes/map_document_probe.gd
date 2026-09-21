@@ -14,6 +14,7 @@ func _init() -> void:
 	_test_layer_lock()
 	_test_objects()
 	_test_fill_rect()
+	_test_flood_fill()
 	_test_line_cells()
 	_test_command_stack()
 	_test_undo_with_document()
@@ -105,6 +106,33 @@ func _test_fill_rect() -> void:
 	_check(entries2.size() == 3 and doc.get_tile("ground", Vector2i(5, 5))["asset_id"] == "keep_me", "跳过模式保留已有内容")
 	doc.set_layer_property("ground", "locked", true)
 	_check(doc.fill_rect("ground", Rect2i(Vector2i(9, 9), Vector2i.ONE), "x").is_empty(), "锁定层拒绝矩形填充")
+	doc.set_layer_property("ground", "locked", false)
+
+func _test_flood_fill() -> void:
+	var doc := MapDocument.new()
+	# 2×2 草地连通区 + 一格被路隔断的草地
+	for c in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
+		doc.set_tile("ground", c, "grass")
+	doc.set_tile("ground", Vector2i(2, 0), "road") # 隔断
+	doc.set_tile("ground", Vector2i(5, 0), "grass") # 不连通同素材
+	var entries := doc.flood_fill("ground", Vector2i(0, 0), "floor")
+	_check(entries.size() == 4, "连通同素材区域 4 格")
+	_check(doc.get_tile("ground", Vector2i(1, 1))["asset_id"] == "floor", "区域内已替换")
+	_check(doc.get_tile("ground", Vector2i(5, 0))["asset_id"] == "grass", "不连通同素材不被替换")
+	_check(doc.get_tile("ground", Vector2i(2, 0))["asset_id"] == "road", "异素材边界不被吞")
+	# 空起点：填充被围连通空区（4×4 环路围 9 格空区）
+	var doc2 := MapDocument.new()
+	for i in 5:
+		doc2.set_tile("ground", Vector2i(i, 0), "road")
+		doc2.set_tile("ground", Vector2i(i, 4), "road")
+		doc2.set_tile("ground", Vector2i(0, i), "road")
+		doc2.set_tile("ground", Vector2i(4, i), "road")
+	var empties := doc2.flood_fill("ground", Vector2i(2, 2), "grass")
+	_check(empties.size() == 9, "空区填充连通 9 格")
+	_check(doc2.get_tile("ground", Vector2i(0, 0))["asset_id"] == "road", "环路环体不被填充")
+	# 锁定拒绝
+	doc.set_layer_property("ground", "locked", true)
+	_check(doc.flood_fill("ground", Vector2i(0, 0), "x").is_empty(), "锁定层拒绝油漆桶")
 	doc.set_layer_property("ground", "locked", false)
 
 func _test_line_cells() -> void:
