@@ -28,6 +28,7 @@ func _init() -> void:
 	await _scene_variant_refresh()
 	await _scene_locked_layer()
 	await _scene_adjacent_variants()
+	await _scene_object_start_stale()
 	_finish()
 
 ## 自建确定性场景：清全部内容后重摆（道路/草地=ground，墙=terrain，1 物件=building）
@@ -227,6 +228,34 @@ func _scene_adjacent_variants() -> void:
 	_check(_tiles("ground") == 0, "松手后不复活（%d 格，曾全部变端头变体）" % _tiles("ground"))
 	main._do_undo()
 	_check(_tiles("ground") == n0, "整笔撤销恢复（%d=%d）" % [_tiles("ground"), n0])
+
+## 物件起笔的第二笔不得携带上一笔 extras 残留（用户实测「擦光后弹出一个块」：
+## 上一笔变体记录残留，本笔从物件上起笔的分支漏重置，push 时把已擦格写回变体）
+func _scene_object_start_stale() -> void:
+	for l in main._document.get_layers():
+		var lid := str((l as Dictionary)["id"])
+		for c in main._document.get_tile_coords(lid).duplicate():
+			main._document.erase_tile(lid, c, true)
+	for x in [-6, -5, -4, -3, -2]:
+		main._place_asset(main._demo_asset("tiles/road_h.png"), Vector2i(x, 0))
+	main._place_asset(main._demo_asset("props/house.png"), Vector2i(-2, -2)) # 恒定起笔格
+	main._commands.clear()
+	main._toggle_eraser()
+	await _begin_erase_fixed() # 起笔 (-2,-2)=物件格：object 分支删物件
+	for x in [-2, -3, -4, -5, -6]: # 第一笔擦道路（产生 extras）
+		main._erase_to(Vector2i(x, 0))
+	main._end_erase()
+	_check(_tiles("ground") == 0, "第一笔擦净（%d）" % _tiles("ground"))
+	# 再摆物件+一格 grass：第二笔从物件起笔（object 分支）拖到 grass（cells 非空触发 push）
+	main._place_asset(main._demo_asset("props/house.png"), Vector2i(-2, -2))
+	main._place_asset(main._demo_asset("tiles/grass.png"), Vector2i(-8, -2))
+	main._commands.clear()
+	await _begin_erase_fixed() # 起笔又命中物件（object 分支——曾漏重置 extras）
+	main._erase_to(Vector2i(-8, -2))
+	main._end_erase()
+	_check(_tiles("ground") == 0, "物件起笔第二笔不复活（%d 格，曾弹出上一笔变体）" % _tiles("ground"))
+	main._do_undo()
+	_check(_tiles("ground") == 1, "第二笔撤销恢复 grass（%d）" % _tiles("ground"))
 
 func _finish() -> void:
 	print("[TileMason] 探针结束：通过 %d / 失败 %d" % [_pass, _fail])

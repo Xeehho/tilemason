@@ -1359,6 +1359,7 @@ func _begin_erase() -> void:
 		_erase_layer = ""
 		_erasing = true
 		_erase_cells = []
+		_erase_extra = {} # 同 tile 分支：残留会把上一笔变体重放到本笔 push（实测「擦光后弹出」）
 		_erase_to(mouse_cell())
 		return
 	# tile 笔画：活动层点名→整笔钉住该层（精确控制）；未点名→每格所见即所擦
