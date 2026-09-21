@@ -220,6 +220,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			_toggle_bucket_mode()
 		elif key.keycode == KEY_F and not key.ctrl_pressed:
 			_toggle_favorite()
+		elif key.keycode == KEY_TAB:
+			_panel.visible = not _panel.visible # design.md §6.3 Tab 显隐素材库
+			print("[TileMason] 素材面板：%s" % ("显示" if _panel.visible else "隐藏（Tab 再显）"))
+		elif key.keycode == KEY_Q and not key.ctrl_pressed:
+			_focus_selection() # design.md §6.3 F 聚焦——F 被收藏占用，用 Q 近旁键位
 		elif key.keycode >= KEY_1 and key.keycode <= KEY_9:
 			_hotbar_activate(key.keycode - KEY_1)
 		elif key.keycode == KEY_ESCAPE:
@@ -758,6 +763,26 @@ func _select_all() -> void:
 			if not coords.is_empty():
 				cells[layer_id] = coords
 	_apply_selection(ids, cells)
+
+## 聚焦：相机跳到选中内容中心（无选中则到鼠标格；§6.3 聚焦选中对象）
+func _focus_selection() -> void:
+	var target := Vector2(mouse_cell()) * DEFAULT_GRID + Vector2.ONE * DEFAULT_GRID / 2.0
+	if not _selection.is_empty():
+		var sum := Vector2.ZERO
+		var n := 0
+		for id in _selection.object_ids():
+			var obj := _document.get_object(int(id))
+			if not obj.is_empty():
+				sum += MapView.object_sprite_position(obj["cell"], Vector2i.ONE, DEFAULT_GRID, DEFAULT_GRID)
+				n += 1
+		for layer_id in _selection.cells_by_layer().keys():
+			for c in _selection.cells_by_layer()[str(layer_id)]:
+				sum += (Vector2(c as Vector2i) + Vector2.ONE * 0.5) * DEFAULT_GRID
+				n += 1
+		if n > 0:
+			target = sum / n
+	get_viewport().get_camera_2d().position = target
+	print("[TileMason] 已聚焦到 %s" % str(target))
 
 ## 最近使用：新选中排最前、去重、最多 10 件，落盘并刷新面板
 func _push_recent(asset_id: String) -> void:
