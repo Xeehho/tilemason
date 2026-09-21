@@ -471,6 +471,7 @@ func _toggle_select_mode() -> void:
 	if _select_mode:
 		_exit_select_mode()
 		return
+	_deactivate_other_tools()
 	_select_mode = true
 	print("[TileMason] 选择模式：拖框选物件，拖动选中物件移动，Esc/S 退出")
 	refresh_status()
@@ -744,6 +745,7 @@ func _toggle_line_mode() -> void:
 	if _selected_asset_id.is_empty() or not AssetLibrary.TILE_CATEGORIES.has(str(_library.get_asset(_selected_asset_id).get("category", ""))):
 		print("[TileMason] 直线工具需要先选中规则方块类素材")
 		return
+	_deactivate_other_tools()
 	_line_mode = true
 	_line_armed = false
 	print("[TileMason] 直线工具：点起点，再点终点画线（L/Esc 退出）")
@@ -1129,8 +1131,22 @@ func _hotbar_activate(index: int) -> void:
 				return
 			_panel.select_asset(asset_id) # 走面板选中链路（信号回写选中+状态栏）
 
+## 工具模式互斥：开启任一模式前退出其余模式（用户实测：选顶部直线/选择后
+## 按 E 进橡皮，左键仍被直线/选择分支吃掉——_unhandled_input 按标志分发，多开必抢输入）
+func _deactivate_other_tools() -> void:
+	if _line_mode:
+		_exit_line_mode()
+	if _select_mode:
+		_exit_select_mode()
+	if _bucket_mode:
+		_toggle_bucket_mode()
+	if _eraser_mode:
+		_toggle_eraser()
+
 ## 油漆桶（design.md §2.2 油漆桶填充）：连通同素材区域整体替换，整段单命令
 func _toggle_bucket_mode() -> void:
+	if not _bucket_mode:
+		_deactivate_other_tools()
 	_bucket_mode = not _bucket_mode
 	print("[TileMason] 油漆桶模式：%s" % ("开（左键点击填充连通区域）" if _bucket_mode else "关"))
 	refresh_status()
@@ -1187,6 +1203,8 @@ func _push_tile_command(cmd_name: String, layer_id: String, base: Array, extras:
 	_commands.push(cmd_name, do_cmd, undo_cmd)
 
 func _toggle_eraser() -> void:
+	if not _eraser_mode:
+		_deactivate_other_tools()
 	_eraser_mode = not _eraser_mode
 	print("[TileMason] 橡皮擦模式：%s" % ("开（左键/右键/拖动清除当前层，E 关闭）" if _eraser_mode else "关"))
 	refresh_status()
