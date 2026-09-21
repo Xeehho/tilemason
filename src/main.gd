@@ -1281,7 +1281,7 @@ func _harvest_refresh(layer_id: String, cell: Vector2i, store: Dictionary) -> vo
 		if store.has(key):
 			(store[key] as Dictionary)["new_asset_id"] = str(c["new_asset_id"])
 		else:
-			store[key] = {"cell": key, "old_asset_id": str(c["old_asset_id"]), "new_asset_id": str(c["new_asset_id"])}
+			store[key] = {"cell": key, "old_asset_id": str(c["old_asset_id"]), "new_asset_id": str(c["new_asset_id"]), "layer": layer_id} # 混合层擦除：变体变更也随格带层
 
 ## 统一构造方块类命令：base=直接编辑格 [{cell, old}]，extras=自动连接变更格
 ## painted_asset 为空串＝擦除语义（重放清格），否则重放写该素材；extras 的 new 优先（变体覆盖）
@@ -1293,25 +1293,27 @@ func _push_tile_command(cmd_name: String, layer_id: String, base: Array, extras:
 	var do_cmd := func() -> void:
 		for e in entries:
 			var ee: Dictionary = e
+			var el := str(ee.get("layer", layer_id)) # 擦除笔画可混合层（层随格走）
 			if ee["new"] == null:
-				_document.erase_tile(layer_id, ee["cell"] as Vector2i, true)
+				_document.erase_tile(el, ee["cell"] as Vector2i, true)
 			else:
-				_document.set_tile(layer_id, ee["cell"] as Vector2i, str(ee["new"]), true)
+				_document.set_tile(el, ee["cell"] as Vector2i, str(ee["new"]), true)
 	var undo_cmd := func() -> void:
 		for i in range(entries.size() - 1, -1, -1):
 			var ee: Dictionary = entries[i]
+			var el := str(ee.get("layer", layer_id)) # 擦除笔画可混合层（层随格走）
 			var prev: Dictionary = ee["old"]
 			if prev.is_empty():
-				_document.erase_tile(layer_id, ee["cell"] as Vector2i, true)
+				_document.erase_tile(el, ee["cell"] as Vector2i, true)
 			else:
-				_document.set_tile(layer_id, ee["cell"] as Vector2i, str(prev["asset_id"]), true)
+				_document.set_tile(el, ee["cell"] as Vector2i, str(prev["asset_id"]), true)
 	_commands.push(cmd_name, do_cmd, undo_cmd)
 
 func _toggle_eraser() -> void:
 	if not _eraser_mode:
 		_deactivate_other_tools()
 	_eraser_mode = not _eraser_mode
-	print("[TileMason] 橡皮擦模式：%s" % ("开（左键/右键/拖动清除当前层，E 关闭）" if _eraser_mode else "关"))
+	print("[TileMason] 橡皮擦模式：%s" % ("开（左键/右键/拖动清除所见内容；点名活动层=只清该层；E 关闭）" if _eraser_mode else "关"))
 	refresh_status()
 
 ## 橡皮擦目标层（用户实测反馈 2026-09-21：选中长安素材[全 building 类]后擦不掉
@@ -1352,28 +1354,56 @@ func _begin_erase() -> void:
 		return
 	if layer_dict["type"] == "object":
 		_erase_object_at(mouse_cell(), layer)
+		# 不提前收笔：按下删物件后若拖到 tile 区，_erase_to 仍在积累——
+		# 早退会让 _erasing=false，抬手 _end_erase 跳过 push，拖动擦除不可撤销（实测踩中）
+		_erase_layer = ""
+		_erasing = true
+		_erase_cells = []
+		_erase_to(mouse_cell())
 		return
-	_erase_layer = layer
+	# tile 笔画：活动层点名→整笔钉住该层（精确控制）；未点名→每格所见即所擦
+	# （用户实测：起笔探测一次固定单层，拖刷跨到别层内容[墙在 terrain]擦不动——「擦不干净」）
+	var active := _layer_panel.active_layer()
+	_erase_layer = active if not active.is_empty() and not _document.get_layer(active).is_empty() else ""
 	_erasing = true
 	_erase_cells = []
+	_erase_extra = {} # 变体刷新字典必须逐笔重置：残留会把上一笔的变体重放到已擦格（实测 9→10 反常）
 	_erase_to(mouse_cell())
 
 func _erase_to(cell: Vector2i) -> void:
 	if cell == _last_cell:
 		return
+	var layer := _erase_layer if not _erase_layer.is_empty() else _probe_top_tile_layer_at(cell)
+	if layer.is_empty():
+		_last_cell = cell # 该格各层皆空：去重记录，不写入
+		return
 	# 高级选项（design.md §5「只清除当前素材类型」）：按住 Ctrl 擦除时
 	# 只清与当前选中素材同款的格（其余内容原样保留）
 	if Input.is_key_pressed(KEY_CTRL) and not _selected_asset_id.is_empty():
-		var entry := _document.get_tile(_erase_layer, cell)
+		var entry := _document.get_tile(layer, cell)
 		if entry.is_empty() or str(entry.get("asset_id", "")) != _selected_asset_id:
 			_last_cell = cell # 记录去重但不写入（避免重复查询）
 			return
-	var old: Variant = _document.erase_tile(_erase_layer, cell)
+	var old: Variant = _document.erase_tile(layer, cell)
 	if old == null:
 		return
-	_erase_cells.append({"cell": cell, "old": old})
-	_harvest_refresh(_erase_layer, cell, _erase_extra)
+	_erase_cells.append({"cell": cell, "old": old, "layer": layer}) # 层随格走（混合层笔画）
+	_harvest_refresh(layer, cell, _erase_extra)
 	_last_cell = cell
+
+## 该格可见内容的最上层 tile 层（物件层跳过——物件走单击删除；锁定/隐藏层跳过）
+func _probe_top_tile_layer_at(cell: Vector2i) -> String:
+	var layers: Array = _document.get_layers()
+	for i in range(layers.size() - 1, -1, -1):
+		var layer: Dictionary = layers[i]
+		var lid := str(layer["id"])
+		if _document.is_layer_locked(lid) or not bool(layer.get("visible", true)):
+			continue
+		if str(layer["type"]) != "tile":
+			continue
+		if not _document.get_tile(lid, cell).is_empty():
+			return lid
+	return ""
 
 func _end_erase() -> void:
 	_last_cell = Vector2i(99999, 99999)

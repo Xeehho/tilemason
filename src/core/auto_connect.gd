@@ -70,13 +70,21 @@ static func merge_tile_changes(base: Array, extras: Dictionary, painted_asset: S
 	for e in base:
 		var b: Dictionary = e
 		var new_v: Variant = null if painted_asset.is_empty() else painted_asset
-		merged[b["cell"]] = {"cell": b["cell"], "old": b["old"], "new": new_v}
+		var entry := {"cell": b["cell"], "old": b["old"], "new": new_v}
+		if b.has("layer"):
+			entry["layer"] = str(b["layer"]) # 混合层擦除笔画：层随格走，merge 不得丢
+		merged[b["cell"]] = entry
 	for key in extras.keys():
 		var x: Dictionary = extras[key]
 		if merged.has(key):
 			(merged[key] as Dictionary)["new"] = str(x["new_asset_id"])
+			if x.has("layer") and not (merged[key] as Dictionary).has("layer"):
+				(merged[key] as Dictionary)["layer"] = str(x["layer"])
 		else:
-			merged[key] = {"cell": key, "old": {"asset_id": str(x["old_asset_id"])}, "new": str(x["new_asset_id"])}
+			var entry2 := {"cell": key, "old": {"asset_id": str(x["old_asset_id"])}, "new": str(x["new_asset_id"])}
+			if x.has("layer"):
+				entry2["layer"] = str(x["layer"])
+			merged[key] = entry2
 	return merged.values()
 
 ## 落格/擦除后刷新：重算 cell 与其同类邻居的变体
