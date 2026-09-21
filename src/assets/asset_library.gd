@@ -45,6 +45,7 @@ func scan(roots: Array) -> int:
 					_load_pack(root_path.path_join(str(entry)), str(entry))
 				entry = dir.get_next()
 			dir.list_dir_end()
+	_category_index.clear() # 素材表已重建，分类索引缓存失效
 	return _assets.size()
 
 ## 素材包数 / 素材数
@@ -60,12 +61,19 @@ func get_asset(asset_id: String) -> Dictionary:
 func get_assets() -> Array:
 	return _assets.values()
 
+## 分类索引缓存（懒构建；scan 重建素材表时失效）——
+## 变体刷新热路径每格调用（大矩形 2500 格×全表 1117 项≈4.8s 卡顿的主因之一）
+var _category_index := {}
+
 ## 分类下素材列表（保持清单顺序）
 func get_assets_by_category(category: String) -> Array:
+	if _category_index.has(category):
+		return _category_index[category]
 	var result := []
 	for asset_id in _assets.keys():
 		if str((_assets[asset_id] as Dictionary)["category"]) == category:
 			result.append(_assets[asset_id])
+	_category_index[category] = result
 	return result
 
 ## 当前实际存在素材的分类（按 ALL_CATEGORIES 顺序，未知分类排尾部）

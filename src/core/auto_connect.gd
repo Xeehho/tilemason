@@ -90,6 +90,31 @@ static func merge_tile_changes(base: Array, extras: Dictionary, painted_asset: S
 			merged[key] = entry2
 	return merged.values()
 
+## 矩形批量落格后的变体刷新：目标=矩形+外圈一圈（内部格互连变体也需重算），
+## 每格只算一次——逐格 refresh_around 对邻居重复计算约 5 倍，大矩形实测 4.8s 卡顿的主因
+static func refresh_rect(doc: MapDocument, lib: AssetLibrary, layer_id: String, rect: Rect2i) -> Array:
+	if doc.is_layer_locked(layer_id):
+		return []
+	var changes := []
+	for y in range(rect.position.y - 1, rect.end.y + 1):
+		for x in range(rect.position.x - 1, rect.end.x + 1):
+			var cell := Vector2i(x, y)
+			var entry := doc.get_tile(layer_id, cell)
+			if entry.is_empty():
+				continue
+			var asset := lib.get_asset(str(entry.get("asset_id", "")))
+			if asset.is_empty():
+				continue
+			var category := str(asset["category"])
+			var mask := neighbor_mask(doc, lib, layer_id, cell, category)
+			var variant := pick_variant(lib, category, mask)
+			if variant.is_empty() or variant == str(entry["asset_id"]):
+				continue
+			var old_id := str(entry["asset_id"])
+			doc.set_tile(layer_id, cell, variant, true)
+			changes.append({"cell": cell, "old_asset_id": old_id, "new_asset_id": variant})
+	return changes
+
 ## 落格/擦除后刷新：重算 cell 与其同类邻居的变体
 ## 返回变更清单 [{cell, old_asset_id, new_asset_id}]——已直接应用（set_tile force），
 ## 调用方把每条包进当前命令的 undo（old 恢复）/redo（new 重放）

@@ -54,9 +54,17 @@ func setup(doc: MapDocument) -> void:
 	if not _document.object_changed.is_connected(_on_content_changed):
 		_document.object_changed.connect(_on_content_changed) # 物件替换/跨层移动也影响计数
 
+var _count_dirty := false ## 计数刷新去抖：批量落格（矩形 2500 格）逐格 tile_changed 会
+## 触发同次数全行计数重算（每行遍历文档），帧末合并为一次
+
 func _on_content_changed(_a = null, _b = null) -> void:
-	for id in _rows.keys():
-		(_rows[id] as LayerEntry).refresh_count()
+	_count_dirty = true
+
+func _process(_delta: float) -> void:
+	if _count_dirty:
+		_count_dirty = false
+		for id in _rows.keys():
+			(_rows[id] as LayerEntry).refresh_count()
 
 func _on_layer_changed(layer_id: String, key: String) -> void:
 	# 只重建名字（行结构）；visible/locked/opacity 由行内控件自更新——

@@ -541,8 +541,10 @@ func _end_rect() -> void:
 	if entries.is_empty():
 		return
 	var extras := {}
-	for e in entries:
-		_harvest_refresh(layer_id, (e as Dictionary)["cell"], extras)
+	for rc in AutoConnect.refresh_rect(_document, _library, layer_id, rect):
+		var c: Dictionary = rc
+		var key: Vector2i = c["cell"]
+		extras[key] = {"cell": key, "old_asset_id": str(c["old_asset_id"]), "new_asset_id": str(c["new_asset_id"]), "layer": layer_id}
 	_push_tile_command("矩形填充 %d 格%s" % [entries.size(), "（跳过已有）" if skip else ""], layer_id, entries, extras, str(asset["id"]))
 
 ## ---- 选择模式（design.md §2.1/§7：框选、多选移动）----

@@ -130,6 +130,16 @@ func _scene_rect() -> void:
 	_check(_tiles() == 25, "矩形填充 5×5=25 格（%d）" % _tiles())
 	main._do_undo()
 	_check(_tiles() == 0, "矩形单命令撤销")
+	# 大矩形性能回归：50×50 含变体刷新（曾 4.8s 卡顿——分类索引+批量刷新修复）
+	main._rect_start = Vector2i(-51, -51)
+	var t0 := Time.get_ticks_msec()
+	main._begin_rect()
+	main._rect_start = Vector2i(-51, -51)
+	main._end_rect()
+	var dt: int = Time.get_ticks_msec() - t0
+	_check(_tiles() == 2500, "大矩形 50×50=2500 格（%d）" % _tiles())
+	_check(dt < 2000, "大矩形耗时 %dms < 2000ms（修复前 4808ms）" % dt)
+	main._do_undo()
 
 func _scene_bucket() -> void:
 	_clear_world()
