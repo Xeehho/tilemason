@@ -161,7 +161,21 @@ func _process(_delta: float) -> void:
 		# 范围框与预览同步：覆盖整个占格区域（左上角锚矩形）
 		_footprint_preview.set_rect_px(Rect2(Vector2(cell_tl) * DEFAULT_GRID, Vector2(cells) * DEFAULT_GRID))
 		_footprint_preview.visible = true
+		# §8 遮挡道路警示：占格范围内任一格在地面层是道路类 → 橙色框
+		_footprint_preview.modulate = Color(1.0, 0.55, 0.25) if _covers_road(cell_tl, cells) else Color(0.35, 1.0, 0.45)
 	_preview.visible = true
+
+## 占格范围是否压到道路类素材（design.md §8 遮挡道路警示）
+func _covers_road(cell_tl: Vector2i, cells: Vector2i) -> bool:
+	for dy in cells.y:
+		for dx in cells.x:
+			var entry := _document.get_tile("ground", cell_tl + Vector2i(dx, dy))
+			if entry.is_empty():
+				continue
+			var asset := _library.get_asset(str(entry.get("asset_id", "")))
+			if not asset.is_empty() and str(asset["category"]) == "road":
+				return true
+	return false
 
 func _mouse_over_panel() -> bool:
 	return _panel.get_global_rect().has_point(_panel.get_global_mouse_position())
@@ -1528,6 +1542,7 @@ func _capture_screenshot() -> void:
 	# 确定性取证：warp 在后台窗口下不稳定，固定画一个范围框（世界 256,256 起占 6×6 格）
 	_footprint_demo_lock = true
 	_footprint_preview.set_rect_px(Rect2(256, 256, 96, 96))
+	_footprint_preview.modulate = Color(0.35, 1.0, 0.45) # 取证固定绿框（遮挡警示运行时动态变色，另行像素取证）
 	_footprint_preview.visible = true
 	await get_tree().create_timer(1.2).timeout
 	var img := get_viewport().get_texture().get_image()
