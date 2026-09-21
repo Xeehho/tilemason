@@ -15,6 +15,7 @@ func _init() -> void:
 	_test_objects()
 	_test_fill_rect()
 	_test_flood_fill()
+	_test_layer_structure()
 	_test_replace_asset()
 	_test_line_cells()
 	_test_command_stack()
@@ -135,6 +136,29 @@ func _test_flood_fill() -> void:
 	doc.set_layer_property("ground", "locked", true)
 	_check(doc.flood_fill("ground", Vector2i(0, 0), "x").is_empty(), "锁定层拒绝油漆桶")
 	doc.set_layer_property("ground", "locked", false)
+
+func _test_layer_structure() -> void:
+	var doc := MapDocument.new()
+	# 加层：id 自增不冲突、类型合法化、名字默认
+	var id1 := doc.add_layer("tile", "我的地面")
+	_check(doc.layer_count() == 6 and doc.get_layer(id1)["name"] == "我的地面", "加层：命名+计数")
+	var id2 := doc.add_layer("bogus") # 非法类型→object
+	_check(doc.get_layer(id2)["type"] == "object", "非法类型归一为 object")
+	# 删层保护：有内容拒绝、空层可删、至少留一层
+	doc.set_tile(id1, Vector2i(0, 0), "x")
+	_check(doc.remove_layer(id1) == false, "有内容层拒删")
+	doc.erase_tile(id1, Vector2i(0, 0))
+	_check(doc.remove_layer(id1) == true and doc.layer_count() == 6, "空层可删")
+	# 排序：移动后层序与序列化往返
+	_check(doc.move_layer(id2, 0) == true, "排序成功")
+	_check(doc.get_layers()[0]["id"] == id2, "移到最底（序 0）")
+	_check(doc.move_layer(id2, 99) == false, "越界拒排")
+	var json := JSON.stringify(doc.to_dict())
+	var doc2 := MapDocument.from_dict(JSON.parse_string(json) as Dictionary)
+	var ids := []
+	for l in doc2.get_layers():
+		ids.append(str(l["id"]))
+	_check(ids.find(id2) == 0 and doc2.layer_count() == 6, "自定义层+排序序列化往返")
 
 func _test_replace_asset() -> void:
 	var doc := MapDocument.new()

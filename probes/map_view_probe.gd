@@ -27,6 +27,7 @@ func _init() -> void:
 	_test_stroke(doc, view)
 	_test_layer_visibility(doc, view)
 	_test_selection(doc, view)
+	_test_layer_order(doc, lib, view)
 	_test_rebuild(doc, lib, view)
 	_cleanup()
 	print("[TileMason] 探针结束：通过 %d / 失败 %d" % [_pass, _fail])
@@ -240,6 +241,18 @@ func _test_selection(doc: MapDocument, view: MapView) -> void:
 	_check(doc.get_object(a)["cell"] == to, "移动命令应用")
 	stack.undo()
 	_check(doc.get_object(a)["cell"] == from, "撤销移动恢复原位")
+
+func _test_layer_order(doc: MapDocument, lib: AssetLibrary, view: MapView) -> void:
+	# 自定义层+拖拽排序：tile 与物件 sprite 的 z 随层序联动
+	var id1 := doc.add_layer("tile", "高层方块") # 新层默认在末序（最高）
+	doc.move_layer(id1, 0) # 先拖到最底（最低）
+	doc.set_tile(id1, Vector2i(50, 0), "probe_mv/tiles/tile.png")
+	var s_low := view.get_tile_sprite(id1, Vector2i(50, 0))
+	var z_before := s_low.z_index if s_low != null else -999
+	doc.move_layer(id1, doc.layer_count() - 1) # 再拖回最上（最高）
+	var s_top := view.get_tile_sprite(id1, Vector2i(50, 0))
+	_check(s_top != null and s_top.z_index > z_before, "拖到最上后 tile z 提高联动（%d → %d）" % [z_before, s_top.z_index if s_top != null else -1])
+	doc.remove_layer(id1)
 
 func _test_rebuild(doc: MapDocument, lib: AssetLibrary, view: MapView) -> void:
 	var tiles_before := view.tile_sprite_count()

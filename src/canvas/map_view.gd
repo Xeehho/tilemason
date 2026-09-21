@@ -49,6 +49,7 @@ func setup(doc: MapDocument, lib: AssetLibrary) -> void:
 	document.object_changed.connect(func(id: int) -> void: _sync_object(id))
 	document.object_removed.connect(func(id: int) -> void: _remove_object(id))
 	document.layer_changed.connect(_on_layer_changed)
+	document.layers_restructured.connect(_refresh_layer_order)
 	_rebuild()
 
 ## ---- 供探针/工具检视 ----
@@ -220,6 +221,27 @@ func _on_layer_changed(layer_id: String, key: String) -> void:
 			if sprite != null:
 				sprite.modulate.a = alpha
 
+## 层表结构变化（加/删/拖拽排序）：重建 z 表并刷新全部 Sprite 的层 z
+func _refresh_layer_order() -> void:
+	_layer_z.clear()
+	var z := 0
+	for layer in document.get_layers():
+		_layer_z[str((layer as Dictionary)["id"])] = z
+		z += 1
+	for key in _tile_sprites.keys():
+		var parts := str(key).split("|")
+		(_tile_sprites[key] as Sprite2D).z_index = int(_layer_z.get(parts[0], 0))
+	for obj in document.get_objects():
+		var o := obj as Dictionary
+		var sprite := _object_sprites.get(int(o["id"])) as Sprite2D
+		if sprite != null:
+			sprite.z_index = OBJECT_Z + int(_layer_z.get(str(o["layer"]), 0))
+	_apply_props_order()
+
+## 物件层间遮挡：z 按层序叠加（层高者盖层低者；同层内仍由 y-sort 决定）
+func _apply_props_order() -> void:
+	pass
+
 ## 新建 Sprite 时应用所属图层当前可见性与透明度
 func _apply_layer_state(sprite: Sprite2D, layer_id: String) -> void:
 	var layer := document.get_layer(layer_id)
@@ -279,6 +301,7 @@ func _sync_object(object_id: int) -> void:
 	if not asset.is_empty():
 		cells = asset["cells"]
 	sprite.centered = true
+	sprite.z_index = OBJECT_Z + int(_layer_z.get(str(obj["layer"]), 0)) # 层间遮挡按层序
 	sprite.position = object_sprite_position(cell, cells, grid_px, tex.get_height())
 
 func _remove_object(object_id: int) -> void:

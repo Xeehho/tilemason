@@ -456,7 +456,7 @@ func _end_rect() -> void:
 	var cell := mouse_cell()
 	var rect := Rect2i(Vector2i(mini(_rect_start.x, cell.x), mini(_rect_start.y, cell.y)),
 		Vector2i(absi(cell.x - _rect_start.x) + 1, absi(cell.y - _rect_start.y) + 1))
-	var layer_id: String = CATEGORY_TO_LAYER.get(str(asset["category"]), "ground")
+	var layer_id := _target_layer_for(str(asset["category"]))
 	# Shift 同按=「遇已有内容停止」模式（design.md §2.2），默认覆盖
 	var skip := Input.is_key_pressed(KEY_SHIFT)
 	var entries: Array = _document.fill_rect(layer_id, rect, str(asset["id"]), skip)
@@ -776,7 +776,7 @@ func _line_click(cell: Vector2i) -> void:
 	if asset.is_empty():
 		_exit_line_mode()
 		return
-	var layer_id: String = CATEGORY_TO_LAYER.get(str(asset["category"]), "ground")
+	var layer_id := _target_layer_for(str(asset["category"]))
 	var entries := []
 	for c in MapDocument.line_cells(_line_start, cell):
 		var prev: Variant = _document.set_tile(layer_id, c, str(asset["id"]))
@@ -801,7 +801,7 @@ func _rebuild_line_preview(to_cell: Vector2i) -> void:
 	if tex == null:
 		return
 	var asset := _library.get_asset(_selected_asset_id)
-	var layer_id: String = CATEGORY_TO_LAYER.get(str(asset.get("category", "")), "ground")
+	var layer_id := _target_layer_for(str(asset.get("category", "")))
 	if _document.is_layer_locked(layer_id):
 		return
 	for c in MapDocument.line_cells(_line_start, to_cell):
@@ -1102,6 +1102,26 @@ func _save_id_list(path: String, ids: Array) -> void:
 		f.store_string(JSON.stringify(ids, "	"))
 		f = null
 
+## 活动层（图层面板点名）：放置/擦除优先落此层；类型不符或空则按分类默认路由
+func _on_active_layer(layer_id: String) -> void:
+	_layer_panel.set_active_layer(layer_id)
+	var layer := _document.get_layer(layer_id)
+	if not layer.is_empty():
+		print("[TileMason] 活动层：「%s」（%s）——放置优先落此层" % [str(layer["name"]), str(layer["type"])])
+	refresh_status()
+
+## 目标层解析：活动层类型匹配素材优先（tile 类素材→tile 活动层；物件→object 活动层）
+func _target_layer_for(category: String) -> String:
+	var is_tile := AssetLibrary.TILE_CATEGORIES.has(category)
+	var active := _layer_panel.active_layer()
+	if not active.is_empty():
+		var layer := _document.get_layer(active)
+		if not layer.is_empty():
+			var want := "tile" if is_tile else "object"
+			if str(layer["type"]) == want:
+				return active
+	return CATEGORY_TO_LAYER.get(category, "deco")
+
 ## 底部快捷栏（design.md §6.2）：居中悬于状态栏上方
 func _build_hotbar() -> void:
 	var layer_ui := CanvasLayer.new()
@@ -1174,7 +1194,7 @@ func _do_bucket_fill(cell: Vector2i) -> void:
 	var asset := _library.get_asset(_selected_asset_id)
 	if asset.is_empty() or not AssetLibrary.TILE_CATEGORIES.has(str(asset["category"])):
 		return
-	var layer_id: String = CATEGORY_TO_LAYER.get(str(asset["category"]), "ground")
+	var layer_id := _target_layer_for(str(asset["category"]))
 	var entries: Array = _document.flood_fill(layer_id, cell, str(asset["id"]))
 	if entries.is_empty():
 		return
@@ -1231,8 +1251,9 @@ func _eraser_layer() -> String:
 	if not _selected_asset_id.is_empty():
 		var asset := _library.get_asset(_selected_asset_id)
 		if not asset.is_empty():
-			return CATEGORY_TO_LAYER.get(str(asset["category"]), "deco")
-	return "ground"
+			return _target_layer_for(str(asset["category"]))
+	var active := _layer_panel.active_layer()
+	return active if not active.is_empty() else "ground"
 
 func _begin_erase() -> void:
 	if _mouse_over_panel():
@@ -1300,7 +1321,7 @@ func _begin_paint() -> void:
 			_place_asset(asset, cell) # Shift：临时单块放置，不进入拖刷笔画（design.md §6.3）
 			return
 		# 方块笔画：按下起笔、拖动连刷、抬手合成一个命令（区域操作整段撤销的地基）
-		var layer_id: String = CATEGORY_TO_LAYER.get(str(asset["category"]), "ground")
+		var layer_id := _target_layer_for(str(asset["category"]))
 		if _document.is_layer_locked(layer_id):
 			print("[TileMason] 图层已锁定，无法放置：%s" % layer_id)
 			return
@@ -1486,6 +1507,8 @@ func _build_layer_panel() -> void:
 		_layer_panel.offset_top = 0
 		_layer_panel.offset_bottom = -224 # 给下方预制件面板让位
 	_layer_panel.setup(_document)
+	if not _layer_panel.layer_activity_requested.is_connected(_on_active_layer):
+		_layer_panel.layer_activity_requested.connect(_on_active_layer)
 	var pf_layer := CanvasLayer.new()
 	pf_layer.layer = 10
 	add_child(pf_layer)

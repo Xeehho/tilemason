@@ -11,6 +11,7 @@ signal object_added(object_id: int)
 signal object_removed(object_id: int)
 signal object_changed(object_id: int)
 signal layer_changed(layer_id: String, key: String)
+signal layers_restructured ## 层表结构变化（加/删/排序），视图与面板全量刷新
 
 const FORMAT_VERSION: int = 1
 const ANCHOR_BOTTOM_CENTER: String = "bottom_center" # 独立物件默认锚点
@@ -58,6 +59,46 @@ func get_layer(layer_id: String) -> Dictionary:
 	if idx < 0:
 		return {}
 	return _layers[idx]
+
+## 新增图层（返回新层 id；type ∈ tile/object，名字默认「自定义层N」）
+func add_layer(layer_type: String, layer_name := "") -> String:
+	if layer_type != "tile" and layer_type != "object":
+		layer_type = "object"
+	var n := 1
+	while _layer_index("layer_%d" % n) >= 0:
+		n += 1
+	var new_id := "layer_%d" % n
+	var entry := _normalize_layer({"id": new_id, "type": layer_type})
+	entry["name"] = layer_name if not layer_name.is_empty() else ("自定义%s层" % ("方块" if layer_type == "tile" else "物件")) + str(n)
+	_layers.append(entry)
+	layers_restructured.emit()
+	return new_id
+
+## 删除图层：有内容的层拒绝（防误删，返回 false 提示先清空）；至少保留一层
+func remove_layer(layer_id: String) -> bool:
+	var idx := _layer_index(layer_id)
+	if idx < 0 or _layers.size() <= 1:
+		return false
+	if layer_id in _tiles.keys() and not (_tiles[layer_id] as Dictionary).is_empty():
+		push_warning("[TileMason] remove_layer：层上有方块，先清空再删（%s）" % layer_id)
+		return false
+	if not get_objects_on_layer(layer_id).is_empty():
+		push_warning("[TileMason] remove_layer：层上有物件，先清空再删（%s）" % layer_id)
+		return false
+	_layers.remove_at(idx)
+	layers_restructured.emit()
+	return true
+
+## 拖拽排序：移动到目标位置（index 为插入后的目标序号，自底向上）
+func move_layer(layer_id: String, to_index: int) -> bool:
+	var idx := _layer_index(layer_id)
+	if idx < 0 or to_index < 0 or to_index >= _layers.size() or to_index == idx:
+		return false
+	var entry: Dictionary = _layers[idx]
+	_layers.remove_at(idx)
+	_layers.insert(mini(to_index, _layers.size()), entry)
+	layers_restructured.emit()
+	return true
 
 func set_layer_property(layer_id: String, key: String, value: Variant) -> bool:
 	if not LAYER_FIELDS.has(key):
