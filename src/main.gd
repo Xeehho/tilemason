@@ -39,6 +39,12 @@ var _rect_preview: RectPreview
 var _footprint_preview: RectPreview ## 占格范围框（多格物件预览时显示覆盖区域，design.md §4/§8）
 var _footprint_demo_lock := false ## 截图取证：锁定固定范围框，跳过 _process 的鼠标跟随
 var _bucket_mode := false ## G 键油漆桶（design.md §2.2）：左键填充连通同素材区域
+var _hotbar: Hotbar ## 底部快捷栏（design.md §6.2）
+const HOTBAR_DEFAULT: Array = [ ## 1-7 素材位默认绑定（随演示包；用户素材包就位后可扩展自定义）
+	"demo/tiles/grass.png", "demo/tiles/road_h.png", "demo/tiles/wall_brick.png",
+	"demo/props/house.png", "demo/props/tree_small.png", "demo/props/stall_red.png",
+	"demo/props/house_shop.png",
+]
 var _selection := Selection.new() ## 选区（S 选择模式）
 var _select_mode := false ## S 键切换：框选/移动物件（design.md §2.1/§7）
 var _marqueeing := false ## 框选拖动进行中
@@ -78,6 +84,7 @@ func _ready() -> void:
 
 	_build_layer_panel()
 	_build_status_bar()
+	_build_hotbar()
 	_connect_status_signals()
 	_setup_autosave()
 	refresh_status()
@@ -203,6 +210,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_toggle_line_mode()
 		elif key.keycode == KEY_G and not key.ctrl_pressed:
 			_toggle_bucket_mode()
+		elif key.keycode >= KEY_1 and key.keycode <= KEY_9:
+			_hotbar_activate(key.keycode - KEY_1)
 		elif key.keycode == KEY_ESCAPE:
 			_exit_select_mode()
 			_exit_line_mode()
@@ -739,6 +748,37 @@ func _select_all() -> void:
 			if not coords.is_empty():
 				cells[layer_id] = coords
 	_apply_selection(ids, cells)
+
+## 底部快捷栏（design.md §6.2）：居中悬于状态栏上方
+func _build_hotbar() -> void:
+	var layer_ui := CanvasLayer.new()
+	layer_ui.layer = 10
+	add_child(layer_ui)
+	_hotbar = Hotbar.new()
+	_hotbar.setup(_library, HOTBAR_DEFAULT)
+	_hotbar.slot_activated.connect(_hotbar_activate)
+	layer_ui.add_child(_hotbar)
+	_hotbar.anchor_left = 0.5
+	_hotbar.anchor_right = 0.5
+	_hotbar.anchor_top = 1.0
+	_hotbar.anchor_bottom = 1.0
+	_hotbar.offset_left = -250
+	_hotbar.offset_right = 250
+	_hotbar.offset_top = -84
+	_hotbar.offset_bottom = -30
+
+## 槽位激活：1-7 选素材、8 橡皮擦、9 吸管提示
+func _hotbar_activate(index: int) -> void:
+	match index:
+		7:
+			_toggle_eraser()
+		8:
+			print("[TileMason] 吸管：在画布上直接右键即可吸取素材")
+		_:
+			var asset_id := _hotbar.binding_asset_id(index)
+			if asset_id.is_empty():
+				return
+			_panel.select_asset(asset_id) # 走面板选中链路（信号回写选中+状态栏）
 
 ## 油漆桶（design.md §2.2 油漆桶填充）：连通同素材区域整体替换，整段单命令
 func _toggle_bucket_mode() -> void:
