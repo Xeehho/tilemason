@@ -1437,6 +1437,7 @@ func _build_asset_panel() -> void:
 	_panel = AssetPanel.new()
 	_panel.setup(_library)
 	_panel.asset_selected.connect(_on_asset_selected)
+	_panel.rescan_requested.connect(_rescan_library)
 	layer.add_child(_panel)
 	_panel.anchor_left = 1.0
 	_panel.anchor_right = 1.0
@@ -1483,6 +1484,15 @@ func _build_layer_panel() -> void:
 	_prefab_panel.offset_top = -220
 	_prefab_panel.offset_bottom = -26 # 状态栏之上
 	_prefab_panel.refresh(_current_prefab)
+
+## 重扫素材库（面板「⟳ 刷新」）：放文件后即时生效，无须重启
+func _rescan_library() -> void:
+	var n := _library.scan(AssetLibrary.default_roots())
+	_panel._populate_categories()
+	_panel.set_recent(_recent)
+	_panel.set_favorites(_favorites)
+	_panel.set_tags(TagStore.reverse_index(_tags))
+	print("[TileMason] 素材库已刷新：%d 项（新增文件请放 assets/packs/<包名>/，含 pack.json 清单）" % n)
 
 func _on_asset_selected(asset_id: String) -> void:
 	_selected_asset_id = asset_id

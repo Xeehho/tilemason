@@ -5,6 +5,7 @@ extends PanelContainer
 ## 全部节点代码动态创建（.tscn 精简纪律）
 
 signal asset_selected(asset_id: String)
+signal rescan_requested ## 刷新素材库（放入文件后点按即扫，无须重启）
 
 const THUMB_BOX := 64 ## 缩略图最大边（px）：16px→4x=64、48px→1x=48，均为整数倍
 const PANEL_WIDTH := 380
@@ -81,6 +82,12 @@ func _build_ui() -> void:
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override("separation", 4)
 	scroll.add_child(box)
+
+	var refresh := Button.new()
+	refresh.text = "⟳ 刷新素材库"
+	refresh.tooltip_text = "放入新素材文件后点此立即扫描（也可随时重启）"
+	refresh.pressed.connect(func() -> void: rescan_requested.emit())
+	box.add_child(refresh)
 
 	var search := LineEdit.new()
 	search.placeholder_text = "搜索素材…"
