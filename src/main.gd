@@ -267,6 +267,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_paste_clipboard()
 		elif key.ctrl_pressed and key.keycode == KEY_P:
 			_save_prefab_from_selection()
+		elif key.ctrl_pressed and key.keycode == KEY_E:
+			_export_map()
 		elif key.keycode == KEY_P and not key.ctrl_pressed:
 			_place_current_prefab()
 		elif key.ctrl_pressed and key.keycode == KEY_A:
@@ -811,6 +813,22 @@ func _select_all() -> void:
 			if not coords.is_empty():
 				cells[layer_id] = coords
 	_apply_selection(ids, cells)
+
+## 导出地图（design.md §10/P4）：Ctrl+E 场景导出（形态A）+ JSON 导出
+func _export_map() -> void:
+	var result: Dictionary = SceneExporter.export_scene(_document, _library)
+	for w in result.get("warnings", []):
+		print("[TileMason] [导出] %s" % str(w))
+	if not result.get("ok", false):
+		print("[TileMason] 场景导出失败：%s" % str(result.get("warnings", "")))
+		return
+	var json_path := _current_map_path.get_basename() + ".export.json"
+	var jf := FileAccess.open(json_path, FileAccess.WRITE)
+	if jf != null:
+		jf.store_string(JSON.stringify(_document.to_dict(), "	"))
+		jf = null
+	print("[TileMason] 导出完成：场景 %s（%d 方块 %d 物件）｜ JSON %s" % [
+		ProjectSettings.globalize_path(str(result["path"])), int(result["tiles"]), int(result["props"]), json_path])
 
 ## 选中内容存为预制件（design.md §7）：相对化快照落盘并设为当前
 func _save_prefab_from_selection() -> void:
@@ -1374,7 +1392,7 @@ func refresh_status() -> void:
 			asset_text = "%s → 落在「%s」%s" % [asset["name"], layer_name, lock_hint]
 	var file_name := _current_map_path.get_file()
 	var pos_text := "(%d,%d)" % [mouse_cell().x, mouse_cell().y]
-	_status.set_line("坐标：%s ｜ 工具：%s ｜ 素材：%s ｜ 文件：%s ｜ S 选择 · E 橡皮 · L 直线 · G 油漆桶 · Ctrl+框 矩形 · Ctrl+Z/Y 撤销重做 · R 批量替换 · Ctrl+P 存预制件 · Ctrl+S 保存 · F9 检查 · F8 连接规则" % [pos_text, tool, asset_text, file_name])
+	_status.set_line("坐标：%s ｜ 工具：%s ｜ 素材：%s ｜ 文件：%s ｜ S 选择 · E 橡皮 · L 直线 · G 油漆桶 · Ctrl+框 矩形 · Ctrl+Z/Y 撤销重做 · R 批量替换 · Ctrl+P 存预制件 · Ctrl+S 保存 · Ctrl+E 导出 · F9 检查 · F8 连接规则" % [pos_text, tool, asset_text, file_name])
 
 ## 图层属性变化影响素材落层提示（锁定警示），载入新文档后重连
 func _connect_status_signals() -> void:
