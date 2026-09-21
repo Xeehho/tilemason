@@ -24,12 +24,14 @@ var _selected_asset_id := "" ## 当前选中素材（素材面板点击/吸管�
 var _preview: Sprite2D ## 半透明放置预览（跟随鼠标）
 var _painting := false ## 方块笔画进行中（左键按住拖刷）
 var _stroke_cells: Array = [] ## 笔画格记录 [{cell, old}]，抬手合成一个命令
+var _stroke_extra := {} ## 笔画期间的自动连接变更（cell -> {old_asset_id, new_asset_id}）
 var _stroke_layer := ""
 var _stroke_asset_id := ""
 var _last_cell := Vector2i(99999, 99999) ## 笔画去重
 var _eraser_mode := false ## E 键切换：左键/拖动清除当前层（design.md §5）
 var _erasing := false ## 擦除笔画进行中
 var _erase_cells: Array = [] ## 擦除格记录 [{cell, old}]
+var _erase_extra := {} ## 擦除期间的自动连接变更
 var _erase_layer := ""
 var _recting := false ## 矩形填充拖框进行中（Ctrl+左键，design.md §2.2/§6.3）
 var _rect_start := Vector2i.ZERO
@@ -338,18 +340,10 @@ func _end_rect() -> void:
 	var entries: Array = _document.fill_rect(layer_id, rect, str(asset["id"]), skip)
 	if entries.is_empty():
 		return
-	var do_fill := func() -> void:
-		for e in entries:
-			_document.set_tile(layer_id, (e as Dictionary)["cell"], str(asset["id"]), true)
-	var undo_fill := func() -> void:
-		for i in range(entries.size() - 1, -1, -1):
-			var e: Dictionary = entries[i]
-			var prev: Dictionary = e["old"]
-			if prev.is_empty():
-				_document.erase_tile(layer_id, e["cell"], true)
-			else:
-				_document.set_tile(layer_id, e["cell"], str(prev["asset_id"]), true)
-	_commands.push("矩形填充 %d 格%s" % [entries.size(), "（跳过已有）" if skip else ""], do_fill, undo_fill)
+	var extras := {}
+	for e in entries:
+		_harvest_refresh(layer_id, (e as Dictionary)["cell"], extras)
+	_push_tile_command("矩形填充 %d 格%s" % [entries.size(), "（跳过已有）" if skip else ""], layer_id, entries, extras, str(asset["id"]))
 
 ## ---- 选择模式（design.md §2.1/§7：框选、多选移动）----
 
@@ -669,18 +663,10 @@ func _line_click(cell: Vector2i) -> void:
 	refresh_status()
 	if entries.is_empty():
 		return
-	var do_line := func() -> void:
-		for e in entries:
-			_document.set_tile(layer_id, (e as Dictionary)["cell"], str(asset["id"]), true)
-	var undo_line := func() -> void:
-		for i in range(entries.size() - 1, -1, -1):
-			var e: Dictionary = entries[i]
-			var prev_cell: Dictionary = e["old"]
-			if prev_cell.is_empty():
-				_document.erase_tile(layer_id, e["cell"], true)
-			else:
-				_document.set_tile(layer_id, e["cell"], str(prev_cell["asset_id"]), true)
-	_commands.push("直线 %d 格" % entries.size(), do_line, undo_line)
+	var extras := {}
+	for e in entries:
+		_harvest_refresh(layer_id, (e as Dictionary)["cell"], extras)
+	_push_tile_command("直线 %d 格" % entries.size(), layer_id, entries, extras, str(asset["id"]))
 
 ## 直线预览：沿线格铺半透明 Sprite（35% 透明度）
 func _rebuild_line_preview(to_cell: Vector2i) -> void:
@@ -747,6 +733,53 @@ func _select_all() -> void:
 				cells[layer_id] = coords
 	_apply_selection(ids, cells)
 
+## 收集自动连接刷新变更（同格多次刷新保留最初旧值、最新新值）
+func _harvest_refresh(layer_id: String, cell: Vector2i, store: Dictionary) -> void:
+	if _document.is_layer_locked(layer_id):
+		return
+	for rc in AutoConnect.refresh_around(_document, _library, layer_id, cell):
+		var c: Dictionary = rc
+		var key: Vector2i = c["cell"]
+		if store.has(key):
+			(store[key] as Dictionary)["new_asset_id"] = str(c["new_asset_id"])
+		else:
+			store[key] = {"cell": key, "old_asset_id": str(c["old_asset_id"]), "new_asset_id": str(c["new_asset_id"])}
+
+## 统一构造方块类命令：base=直接编辑格 [{cell, old}]，extras=自动连接变更格
+## painted_asset 为空串＝擦除语义（重放清格），否则重放写该素材；extras 的 new 优先（变体覆盖）
+## 撤销按合并前的最初旧值整段还原，重放按最终新值整段恢复——变体切换天然可撤销
+func _push_tile_command(cmd_name: String, layer_id: String, base: Array, extras: Dictionary, painted_asset: String) -> void:
+	if base.is_empty() and extras.is_empty():
+		return
+	var merged := {}
+	for e in base:
+		var b: Dictionary = e
+		var new_v: Variant = null if painted_asset.is_empty() else painted_asset
+		merged[b["cell"]] = {"old": b["old"], "new": new_v}
+	for key in extras.keys():
+		var x: Dictionary = extras[key]
+		if merged.has(key):
+			(merged[key] as Dictionary)["new"] = str(x["new_asset_id"])
+		else:
+			merged[key] = {"old": {"asset_id": str(x["old_asset_id"])}, "new": str(x["new_asset_id"])}
+	var entries: Array = merged.values()
+	var do_cmd := func() -> void:
+		for e in entries:
+			var ee: Dictionary = e
+			if ee["new"] == null:
+				_document.erase_tile(layer_id, ee["cell"] as Vector2i, true)
+			else:
+				_document.set_tile(layer_id, ee["cell"] as Vector2i, str(ee["new"]), true)
+	var undo_cmd := func() -> void:
+		for i in range(entries.size() - 1, -1, -1):
+			var ee: Dictionary = entries[i]
+			var prev: Dictionary = ee["old"]
+			if prev.is_empty():
+				_document.erase_tile(layer_id, ee["cell"] as Vector2i, true)
+			else:
+				_document.set_tile(layer_id, ee["cell"] as Vector2i, str(prev["asset_id"]), true)
+	_commands.push(cmd_name, do_cmd, undo_cmd)
+
 func _toggle_eraser() -> void:
 	_eraser_mode = not _eraser_mode
 	print("[TileMason] 橡皮擦模式：%s" % ("开（左键/右键/拖动清除当前层，E 关闭）" if _eraser_mode else "关"))
@@ -782,6 +815,7 @@ func _erase_to(cell: Vector2i) -> void:
 	if old == null:
 		return
 	_erase_cells.append({"cell": cell, "old": old})
+	_harvest_refresh(_erase_layer, cell, _erase_extra)
 	_last_cell = cell
 
 func _end_erase() -> void:
@@ -791,16 +825,7 @@ func _end_erase() -> void:
 	_erasing = false
 	if _erase_cells.is_empty():
 		return
-	var entries: Array = _erase_cells.duplicate(true)
-	var do_erase := func() -> void:
-		for e in entries:
-			_document.erase_tile(_erase_layer, (e as Dictionary)["cell"], true)
-	var undo_erase := func() -> void:
-		for e in entries:
-			var prev: Dictionary = (e as Dictionary)["old"]
-			if not prev.is_empty():
-				_document.set_tile(_erase_layer, (e as Dictionary)["cell"], str(prev["asset_id"]), true)
-	_commands.push("擦除 %d 格" % entries.size(), do_erase, undo_erase)
+	_push_tile_command("擦除 %d 格" % _erase_cells.size(), _erase_layer, _erase_cells, _erase_extra, "")
 
 ## 物件层擦除：删掉鼠标格脚印覆盖的最上层物件（单命令可撤销）
 func _erase_object_at(cell: Vector2i, layer: String) -> void:
@@ -834,6 +859,7 @@ func _begin_paint() -> void:
 		_stroke_layer = layer_id
 		_stroke_asset_id = _selected_asset_id
 		_stroke_cells = []
+		_stroke_extra = {}
 		_painting = true
 		_paint_to(cell)
 	else:
@@ -846,6 +872,7 @@ func _paint_to(cell: Vector2i) -> void:
 	if old == null:
 		return # 放置被拒（锁定等）
 	_stroke_cells.append({"cell": cell, "old": old})
+	_harvest_refresh(_stroke_layer, cell, _stroke_extra)
 	_last_cell = cell
 
 ## 抬手：把整段笔画合成一个命令压栈（undo 一次回滚整段，redo 整段重放）
@@ -856,19 +883,7 @@ func _end_paint() -> void:
 	_painting = false
 	if _stroke_cells.is_empty():
 		return
-	var entries: Array = _stroke_cells.duplicate(true)
-	var do_stroke := func() -> void:
-		for e in entries:
-			_document.set_tile(_stroke_layer, (e as Dictionary)["cell"], _stroke_asset_id, true)
-	var undo_stroke := func() -> void:
-		for i in range(entries.size() - 1, -1, -1):
-			var e: Dictionary = entries[i]
-			var prev: Dictionary = e["old"]
-			if prev.is_empty():
-				_document.erase_tile(_stroke_layer, e["cell"], true)
-			else:
-				_document.set_tile(_stroke_layer, e["cell"], str(prev["asset_id"]), true)
-	_commands.push("笔画 %d 格" % entries.size(), do_stroke, undo_stroke)
+	_push_tile_command("笔画 %d 格" % _stroke_cells.size(), _stroke_layer, _stroke_cells, _stroke_extra, _stroke_asset_id)
 
 ## 吸管：取鼠标下最上层素材并联动面板选中
 func _pick_under_mouse() -> void:
@@ -890,19 +905,13 @@ func _place_asset(asset: Dictionary, cell: Vector2i) -> void:
 	var asset_id := str(asset["id"])
 	var ctx := {} # 引用容器：do/undo 间共享旧值/新对象（dev-pitfalls 11）
 	if AssetLibrary.TILE_CATEGORIES.has(category):
-		var do_place := func() -> void:
-			if not ctx.has("done"):
-				ctx["old"] = _document.set_tile(layer_id, cell, asset_id)
-				ctx["done"] = true
-			else:
-				_document.set_tile(layer_id, cell, asset_id, true) # 重做恢复
-		var undo_place := func() -> void:
-			var prev: Dictionary = ctx.get("old", {})
-			if prev.is_empty():
-				_document.erase_tile(layer_id, cell, true)
-			else:
-				_document.set_tile(layer_id, cell, str(prev["asset_id"]), true)
-		_commands.push("放置 %s" % str(asset["name"]), do_place, undo_place)
+		var old: Variant = _document.set_tile(layer_id, cell, asset_id)
+		if old == null:
+			return # 层无效/锁定
+		var entries := [{"cell": cell, "old": old}]
+		var extras := {}
+		_harvest_refresh(layer_id, cell, extras)
+		_push_tile_command("放置 %s" % str(asset["name"]), layer_id, entries, extras, asset_id)
 	else:
 		var cells: Vector2i = asset["cells"]
 		var cell_tl := MapView.footprint_cell_tl(cells, cell) # 底边中心对齐鼠标格（与预览同源）
@@ -1064,6 +1073,11 @@ func _demo_place_for_screenshot() -> void:
 	# 建筑与树（物件，底边中心锚自动对齐）
 	_place_asset(_demo_asset("props/house.png"), Vector2i(2, 2))
 	_place_asset(_demo_asset("props/tree_small.png"), Vector2i(5, 1))
+	# L 形道路（全部用直线素材摆放，自动连接应把拐角变弯道、端头变端头变体）
+	for x in range(-3, 1):
+		_place_asset(_demo_asset("tiles/road_h.png"), Vector2i(x, 4))
+	for y in range(5, 8):
+		_place_asset(_demo_asset("tiles/road_h.png"), Vector2i(0, y))
 	# 墙体一列 + 摊位（demo 扩充素材）
 	for x in range(-10, -6):
 		_place_asset(_demo_asset("tiles/wall_brick.png"), Vector2i(x, 2))

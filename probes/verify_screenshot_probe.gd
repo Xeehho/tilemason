@@ -82,6 +82,12 @@ func _test_canvas_region(img: Image) -> void:
 			if p.g > 0.5 and p.g - p.r > 0.2 and p.g - p.b > 0.12:
 				green += 1
 	_check(green > 15, "占格范围框可见（固定取样区绿色像素 %d > 15）" % green)
+	# 自动连接证据（P2）：demo 摆 L 形道路全用直线素材——
+	# 拐角格 (0,4) 应自动变弯道（E 闭→右中路缘色），端头格 (-3,4) 应变端头（W 闭→左中路缘色）
+	var corner_px := img.get_pixel(800 + 14, 450 + 72)
+	var endcap_px := img.get_pixel(800 - 47, 450 + 72)
+	_check(corner_px.r < 0.25 and corner_px.g < 0.25, "L 拐角自动变弯道（右中=路缘深色）")
+	_check(endcap_px.r < 0.25 and endcap_px.g < 0.25, "端头自动变端头变体（左中=路缘深色）")
 
 func _count_region(img: Image, x0: int, x1: int, color: Color) -> int:
 	var count := 0

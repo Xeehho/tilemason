@@ -65,6 +65,8 @@ static func pick_variant(lib: AssetLibrary, category: String, mask: int) -> Stri
 ## 返回变更清单 [{cell, old_asset_id, new_asset_id}]——已直接应用（set_tile force），
 ## 调用方把每条包进当前命令的 undo（old 恢复）/redo（new 重放）
 static func refresh_around(doc: MapDocument, lib: AssetLibrary, layer_id: String, cell: Vector2i) -> Array:
+	if doc.is_layer_locked(layer_id):
+		return [] # 锁定层不自动改写（含邻居变体）
 	var changes := []
 	var targets := [cell]
 	for i in 4:
