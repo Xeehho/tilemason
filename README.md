@@ -29,7 +29,7 @@ TileMason 是**独立桌面软件**——最终用户（美术、策划、关卡
 | 预制件（组合保存/整体复用） | 📅 P3 |
 | 导出运行时场景 / 结构化 JSON（形态A） | ✅ |
 
-设计基准文档：[docs/design.md](docs/design.md)（含完整交互约定与第一版验收标准）。
+设计基准文档：[docs/design.md](docs/design.md)（含完整交互约定与第一版验收标准）；上手指南：[docs/user-guide.md](docs/user-guide.md)。
 
 ## 快捷键速查
 
