@@ -90,7 +90,10 @@ func _ready() -> void:
 	_shell = EditorShell.new()
 	_shell.setup()
 	_shell.theme = _app_theme
-	add_child(_shell)
+	var shell_layer := CanvasLayer.new() # Node2D 下 Control 的锚点失效——壳层须挂 CanvasLayer（视口参照）
+	shell_layer.layer = 10
+	add_child(shell_layer)
+	shell_layer.add_child(_shell)
 
 	var asset_count := _library.scan(AssetLibrary.default_roots())
 	_recent = _load_id_list(RECENT_PATH)

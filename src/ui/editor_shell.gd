@@ -42,7 +42,7 @@ func setup() -> void:
 	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root_v.add_child(body)
 
-	left_dock = VSplitContainer.new() # 竖向分栏：图层/预制件比例可调
+	left_dock = VBoxContainer.new() # 左 Dock（图层 EXPAND_FILL + 预制件固定高；分栏拖拽留阶段 C）
 	left_dock.custom_minimum_size = Vector2(LEFT_W, 0)
 	body.add_child(left_dock)
 
@@ -70,7 +70,6 @@ func mount_top(panel: Control) -> void:
 	_reparent(panel, top_bar)
 
 func mount_left_top(panel: Control) -> void:
-	(left_dock as SplitContainer).split_percent_max = 1e9 # 占满可用
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_reparent(panel, left_dock)
 
