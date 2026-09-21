@@ -55,9 +55,10 @@ func _test_panel_region(img: Image) -> void:
 		if hits[(color as Color).to_html()] > 0:
 			found += 1
 	_check(found == PANEL_PROOF_COLORS.size(), "面板缩略图渲染（建筑分类特征色 %d/%d）" % [found, PANEL_PROOF_COLORS.size()])
-	# 缩略图整数倍显示：民居 48px 件 1x 原生尺寸，米黄应形成 >=40px 横向连续段
-	var longest := _longest_run(img, panel_left + 96, img.get_width(), Color("d9c08b"))
-	_check(longest >= 40, "缩略图成块渲染（墙米黄最长连续 %dpx，>=40）" % longest)
+	# 缩略图整数倍显示：民居 48px 件 1x 原生尺寸；墙色被门/窗合理分段，
+	# 用屋顶色断言（水平连续约 32px 无中断）
+	var longest := _longest_run(img, panel_left + 96, img.get_width(), Color("8b3a2f"))
+	_check(longest >= 20, "缩略图成块渲染（屋顶砖红最长连续 %dpx，>=20）" % longest)
 
 func _test_canvas_region(img: Image) -> void:
 	# 画布区：扫描整列像素，网格线（每 16px 一条）应带来亮度波动；单行采样可能恰好落在两线之间
