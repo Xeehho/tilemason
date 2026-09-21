@@ -100,10 +100,11 @@ func _build_ui() -> void:
 	_search_box = search
 
 	_grid = GridContainer.new()
-	_grid.columns = 3
+	_grid.columns = 4 # 初始值；列数由 _adaptive_columns() 按面板实际宽度计算（阶段 B）
 	_grid.add_theme_constant_override("h_separation", 6)
 	_grid.add_theme_constant_override("v_separation", 6)
 	box.add_child(_grid)
+	resized.connect(_on_panel_resized) # 面板宽度变化时重排列数
 
 	_empty_hint = Label.new()
 	_empty_hint.text = "此分类暂无素材"
@@ -262,6 +263,19 @@ func _on_category_selected(meta: String) -> void:
 		var btn := _make_thumb_button(asset as Dictionary)
 		_buttons[str((asset as Dictionary)["id"])] = btn
 		_grid.add_child(btn)
+
+## 列数自适应（阶段 B）：按缩略图区可用宽计算，64px 图+6 间距 → 面板窄则 2 列、宽则 5 列
+func _adaptive_columns() -> int:
+	var avail := size.x - 150 - 24 # 减分类树与边距（近似可用网格宽）
+	if avail < 140:
+		avail = size.x - 24 # 树折叠时
+	var n := int(avail / 70)
+	return clampi(n, 2, 5)
+
+func _on_panel_resized() -> void:
+	var want := _adaptive_columns()
+	if _grid.columns != want:
+		_grid.columns = want
 
 ## 搜索词变化：重刷当前选中节点内容
 func _on_search_changed() -> void:

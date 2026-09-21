@@ -1546,7 +1546,9 @@ func refresh_status() -> void:
 			asset_text = "%s → 落在「%s」%s" % [asset["name"], layer_name, lock_hint]
 	var file_name := _current_map_path.get_file()
 	var pos_text := "(%d,%d)" % [mouse_cell().x, mouse_cell().y]
-	_status.set_line("坐标：%s ｜ 工具：%s ｜ 素材：%s ｜ 文件：%s ｜ S 选择 · E 橡皮 · L 直线 · G 油漆桶 · Ctrl+框 矩形 · Ctrl+Z/Y 撤销重做 · R 批量替换 · Ctrl+P 存预制件 · Ctrl+S 保存 · Ctrl+E 导出 · F9 检查 · F8 连接规则" % [pos_text, tool, asset_text, file_name])
+	var dirty_mark := " ●未保存" if _dirty else ""
+	# 状态栏拆段（阶段 B）：只留四段状态+文件脏标记；快捷键速记移至 ? 帮助（H 键/F1 弹出）
+	_status.set_line("坐标 %s ｜ %s ｜ 素材：%s ｜ 文件：%s%s" % [pos_text, tool, asset_text, file_name, dirty_mark])
 
 ## 图层属性变化影响素材落层提示（锁定警示），载入新文档后重连
 func _connect_status_signals() -> void:
