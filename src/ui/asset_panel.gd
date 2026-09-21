@@ -203,7 +203,15 @@ func _make_thumb_button(asset: Dictionary) -> TextureButton:
 	var asset_id := str(asset["id"])
 	var btn := TextureButton.new()
 	btn.texture_normal = _get_thumb(asset_id)
-	btn.tooltip_text = "%s\n占格 %d×%d" % [str(asset["name"]), (asset["cells"] as Vector2i).x, (asset["cells"] as Vector2i).y]
+	# 锚点角标（design.md §6.1 缩略图显示锚点类型）：底边中心=▽、左上角=△
+	var anchor := str(asset.get("anchor", "bottom_center"))
+	btn.tooltip_text = "%s\n占格 %d×%d\n锚点 %s" % [str(asset["name"]), (asset["cells"] as Vector2i).x, (asset["cells"] as Vector2i).y, "底边中心" if anchor == "bottom_center" else "左上角"]
+	var badge := Label.new()
+	badge.text = "▽" if anchor == "bottom_center" else "△"
+	badge.add_theme_font_size_override("font_size", 11)
+	badge.modulate = Color(1, 1, 1, 0.75)
+	badge.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	btn.add_child(badge)
 	btn.pressed.connect(_on_thumb_pressed.bind(btn, asset_id))
 	return btn
 
