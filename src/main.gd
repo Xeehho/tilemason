@@ -1460,7 +1460,34 @@ func _capture_export_shot() -> void:
 	var img := get_viewport().get_texture().get_image()
 	img.save_png("user://export_shot.png")
 	print("[TileMason] 导出场景截图：%s" % ProjectSettings.globalize_path("user://export_shot.png"))
-	get_tree().quit(0)
+	# ---- 真实移动验收（design.md §10 第 4 步）：CharacterBody2D 走走廊 ----
+	# 摆样：y=4 横向道路（世界 y 64..80）作走廊，两端 (−6,4)→(0,4)；砖墙列在 x=-10（左侧障碍）
+	var player := CharacterBody2D.new()
+	player.name = "MoveProbe"
+	var pshape := CollisionShape2D.new()
+	var prect := RectangleShape2D.new()
+	prect.size = Vector2(8, 8)
+	pshape.shape = prect
+	player.add_child(pshape)
+	player.position = Vector2(-6 * 16 + 8, 4 * 16 + 8) # 走廊起点格中心
+	inst.add_child(player)
+	await get_tree().create_timer(0.2).timeout # 等物理场景就绪
+	var start_pos := player.position
+	var steps := 0
+	var arrived := false
+	while steps < 240 and not arrived:
+		player.velocity = Vector2(40, 0) # 向右走（走廊方向）
+		player.move_and_slide()
+		steps += 1
+		if player.position.x >= 0.0: # 到达 (0,4) 附近
+			arrived = true
+		await get_tree().create_timer(0.016).timeout # 约 60fps 物理步进
+	var moved := player.position.distance_to(start_pos)
+	print("[TileMason] 移动验收：%s，位移 %.0fpx（%d 步），碰撞挡停=%s" % [
+		"到达终点" if arrived else "未到达", moved, steps, str(not arrived and moved < 90.0)])
+	var img2 := get_viewport().get_texture().get_image()
+	img2.save_png("user://export_shot_after_move.png")
+	get_tree().quit(0 if arrived else 1)
 
 ## 视觉取证用：文档为空时程序化摆样（一条道路+草地+建筑+树），延时截屏存盘后退出
 ## 须窗口模式运行，headless 无渲染
