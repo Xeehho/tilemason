@@ -5,10 +5,10 @@ extends SceneTree
 ## 退出码：0=全部通过，1=有失败
 
 const SHOT_PATH := "user://screenshot_editor.png"
-## 面板默认展开第一个分类（地面）→ 只断言该分类两个素材的特征色
+## 截图模式走面板选中链路 → 截屏时面板在「建筑」分类（民居选中）；
+## 断言面板缩略图区出现该分类素材特征色
 const PANEL_PROOF_COLORS: Array = [
-	Color("3a7d2c"), # 草地绿
-	Color("8a6b47"), # 泥土棕
+	Color("d9c08b"), # 民居墙米黄（缩略图）
 ]
 ## 其余 demo 特征色（供后续多分类截图取证扩展）
 const EXTRA_PROOF_COLORS: Array = [
@@ -54,10 +54,10 @@ func _test_panel_region(img: Image) -> void:
 	for color in PANEL_PROOF_COLORS:
 		if hits[(color as Color).to_html()] > 0:
 			found += 1
-	_check(found == PANEL_PROOF_COLORS.size(), "默认分类（地面）两件素材缩略图均渲染（特征色 %d/%d）" % [found, PANEL_PROOF_COLORS.size()])
-	# 缩略图整数倍缩放块：草地绿应形成 >=16px 的横向连续段
-	var longest := _longest_run(img, panel_left + 96, img.get_width(), Color("3a7d2c"))
-	_check(longest >= 16, "特征色成块状渲染（草地绿最长连续 %dpx，>=16 为整数倍缩放块）" % longest)
+	_check(found == PANEL_PROOF_COLORS.size(), "面板缩略图渲染（建筑分类特征色 %d/%d）" % [found, PANEL_PROOF_COLORS.size()])
+	# 缩略图整数倍显示：民居 48px 件 1x 原生尺寸，米黄应形成 >=40px 横向连续段
+	var longest := _longest_run(img, panel_left + 96, img.get_width(), Color("d9c08b"))
+	_check(longest >= 40, "缩略图成块渲染（墙米黄最长连续 %dpx，>=40）" % longest)
 
 func _test_canvas_region(img: Image) -> void:
 	# 画布区：扫描整列像素，网格线（每 16px 一条）应带来亮度波动；单行采样可能恰好落在两线之间
