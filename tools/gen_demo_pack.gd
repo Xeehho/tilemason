@@ -47,8 +47,13 @@ func _init() -> void:
 	_gen_prop("props/house_shop.png", _paint_house_shop)
 	_gen_prop("props/stall_red.png", _paint_stall.bind(AWNING_A, STALL_GOODS_A))
 	_gen_prop("props/stall_green.png", _paint_stall.bind(Color("4f9a3a"), STALL_GOODS_B))
+	# 自动连接变体集：道路/墙各 15 种掩码（P2，design.md §2.2）
+	for mask in range(1, 16):
+		_gen_tile("tiles/road_v%d.png" % mask, _paint_road_mask.bind(mask))
+	for mask in range(1, 16):
+		_gen_tile("tiles/wall_v%d.png" % mask, _paint_wall_mask.bind(mask))
 	_write_manifest()
-	print("[TileMason] demo 素材包生成完毕：%s（12 件）" % ProjectSettings.globalize_path(OUT_DIR))
+	print("[TileMason] demo 素材包生成完毕：%s（42 件）" % ProjectSettings.globalize_path(OUT_DIR))
 	quit(0)
 
 func _prepare_dirs() -> void:
@@ -191,23 +196,56 @@ func _paint_stall(img: Image, canopy: Color, goods: Color) -> void:
 	_rect(img, 22, 26, 5, 4, goods)
 	_rect(img, 32, 26, 5, 4, goods)
 
+## 通用道路变体：开方向路面通到边，闭方向画 3px 路缘带（N=1 E=2 S=4 W=8）
+func _paint_road_mask(img: Image, mask: int) -> void:
+	_rect(img, 0, 0, 16, 16, ROAD_BODY)
+	if not (mask & 1): # N 闭
+		_rect(img, 0, 0, 16, 3, ROAD_EDGE)
+	if not (mask & 4): # S 闭
+		_rect(img, 0, 13, 16, 3, ROAD_EDGE)
+	if not (mask & 8): # W 闭
+		_rect(img, 0, 0, 3, 16, ROAD_EDGE)
+	if not (mask & 2): # E 闭
+		_rect(img, 13, 0, 3, 16, ROAD_EDGE)
+	_rect(img, 7, 7, 2, 2, ROAD_DASH) # 中心提示点
+
+## 通用墙变体：砖面打底，闭方向画砂浆封边带
+func _paint_wall_mask(img: Image, mask: int) -> void:
+	_paint_wall_brick(img)
+	if not (mask & 1):
+		_rect(img, 0, 0, 16, 2, MORTAR)
+	if not (mask & 4):
+		_rect(img, 0, 14, 16, 2, MORTAR)
+	if not (mask & 8):
+		_rect(img, 0, 0, 2, 16, MORTAR)
+	if not (mask & 2):
+		_rect(img, 14, 0, 2, 16, MORTAR)
+
 func _write_manifest() -> void:
-	var manifest := {
-		"name": "演示素材包",
-		"assets": [
-			{"file": "tiles/grass.png", "name": "草地", "category": "ground"},
-			{"file": "tiles/dirt.png", "name": "泥土", "category": "ground"},
-			{"file": "tiles/road_h.png", "name": "道路·直", "category": "road", "connections": ["left", "right"]},
-			{"file": "tiles/road_corner.png", "name": "道路·弯", "category": "road", "connections": ["right", "down"]},
-			{"file": "tiles/wall_brick.png", "name": "砖墙", "category": "wall", "connections": ["left", "right"]},
-			{"file": "tiles/wall_gate.png", "name": "墙·门洞", "category": "wall", "connections": ["left", "right"]},
-			{"file": "props/tree_small.png", "name": "小树", "category": "tree"},
-			{"file": "props/tree_big.png", "name": "大树", "category": "tree"},
-			{"file": "props/house.png", "name": "民居", "category": "building"},
-			{"file": "props/house_shop.png", "name": "店铺", "category": "building"},
-			{"file": "props/stall_red.png", "name": "摊位·食", "category": "stall"},
-			{"file": "props/stall_green.png", "name": "摊位·杂", "category": "stall"},
-		],
-	}
+	var assets := [
+		{"file": "tiles/grass.png", "name": "草地", "category": "ground"},
+		{"file": "tiles/dirt.png", "name": "泥土", "category": "ground"},
+		{"file": "tiles/road_h.png", "name": "道路·直", "category": "road", "connections": ["left", "right"]},
+		{"file": "tiles/road_corner.png", "name": "道路·弯", "category": "road", "connections": ["right", "down"]},
+		{"file": "tiles/wall_brick.png", "name": "砖墙", "category": "wall", "connections": ["left", "right"]},
+		{"file": "tiles/wall_gate.png", "name": "墙·门洞", "category": "wall", "connections": ["left", "right"]},
+		{"file": "props/tree_small.png", "name": "小树", "category": "tree"},
+		{"file": "props/tree_big.png", "name": "大树", "category": "tree"},
+		{"file": "props/house.png", "name": "民居", "category": "building"},
+		{"file": "props/house_shop.png", "name": "店铺", "category": "building"},
+		{"file": "props/stall_red.png", "name": "摊位·食", "category": "stall"},
+		{"file": "props/stall_green.png", "name": "摊位·杂", "category": "stall"},
+	]
+	# 变体清单：连接方向按掩码位生成（与 AutoConnect.mask_to_dirs 同序）
+	const DIR_NAMES := ["up", "right", "down", "left"]
+	for mask in range(1, 16):
+		var dirs := []
+		for i in 4:
+			if mask & (1 << i):
+				dirs.append(DIR_NAMES[i])
+		var label := "+".join(dirs)
+		assets.append({"file": "tiles/road_v%d.png" % mask, "name": "路·%s" % label, "category": "road", "connections": dirs})
+		assets.append({"file": "tiles/wall_v%d.png" % mask, "name": "墙·%s" % label, "category": "wall", "connections": dirs})
 	var f := FileAccess.open(OUT_DIR + "/pack.json", FileAccess.WRITE)
-	f.store_string(JSON.stringify(manifest, "\t"))
+	f.store_string(JSON.stringify({"name": "演示素材包", "assets": assets}, "\t"))
+	f = null

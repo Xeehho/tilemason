@@ -75,6 +75,280 @@
 			"category": "stall",
 			"file": "props/stall_green.png",
 			"name": "摊位·杂"
+		},
+		{
+			"category": "road",
+			"connections": [
+				"up"
+			],
+			"file": "tiles/road_v1.png",
+			"name": "路·up"
+		},
+		{
+			"category": "wall",
+			"connections": [
+				"up"
+			],
+			"file": "tiles/wall_v1.png",
+			"name": "墙·up"
+		},
+		{
+			"category": "road",
+			"connections": [
+				"right"
+			],
+			"file": "tiles/road_v2.png",
+			"name": "路·right"
+		},
+		{
+			"category": "wall",
+			"connections": [
+				"right"
+			],
+			"file": "tiles/wall_v2.png",
+			"name": "墙·right"
+		},
+		{
+			"category": "road",
+			"connections": [
+				"up",
+				"right"
+			],
+			"file": "tiles/road_v3.png",
+			"name": "路·up+right"
+		},
+		{
+			"category": "wall",
+			"connections": [
+				"up",
+				"right"
+			],
+			"file": "tiles/wall_v3.png",
+			"name": "墙·up+right"
+		},
+		{
+			"category": "road",
+			"connections": [
+				"down"
+			],
+			"file": "tiles/road_v4.png",
+			"name": "路·down"
+		},
+		{
+			"category": "wall",
+			"connections": [
+				"down"
+			],
+			"file": "tiles/wall_v4.png",
+			"name": "墙·down"
+		},
+		{
+			"category": "road",
+			"connections": [
+				"up",
+				"down"
+			],
+			"file": "tiles/road_v5.png",
+			"name": "路·up+down"
+		},
+		{
+			"category": "wall",
+			"connections": [
+				"up",
+				"down"
+			],
+			"file": "tiles/wall_v5.png",
+			"name": "墙·up+down"
+		},
+		{
+			"category": "road",
+			"connections": [
+				"right",
+				"down"
+			],
+			"file": "tiles/road_v6.png",
+			"name": "路·right+down"
+		},
+		{
+			"category": "wall",
+			"connections": [
+				"right",
+				"down"
+			],
+			"file": "tiles/wall_v6.png",
+			"name": "墙·right+down"
+		},
+		{
+			"category": "road",
+			"connections": [
+				"up",
+				"right",
+				"down"
+			],
+			"file": "tiles/road_v7.png",
+			"name": "路·up+right+down"
+		},
+		{
+			"category": "wall",
+			"connections": [
+				"up",
+				"right",
+				"down"
+			],
+			"file": "tiles/wall_v7.png",
+			"name": "墙·up+right+down"
+		},
+		{
+			"category": "road",
+			"connections": [
+				"left"
+			],
+			"file": "tiles/road_v8.png",
+			"name": "路·left"
+		},
+		{
+			"category": "wall",
+			"connections": [
+				"left"
+			],
+			"file": "tiles/wall_v8.png",
+			"name": "墙·left"
+		},
+		{
+			"category": "road",
+			"connections": [
+				"up",
+				"left"
+			],
+			"file": "tiles/road_v9.png",
+			"name": "路·up+left"
+		},
+		{
+			"category": "wall",
+			"connections": [
+				"up",
+				"left"
+			],
+			"file": "tiles/wall_v9.png",
+			"name": "墙·up+left"
+		},
+		{
+			"category": "road",
+			"connections": [
+				"right",
+				"left"
+			],
+			"file": "tiles/road_v10.png",
+			"name": "路·right+left"
+		},
+		{
+			"category": "wall",
+			"connections": [
+				"right",
+				"left"
+			],
+			"file": "tiles/wall_v10.png",
+			"name": "墙·right+left"
+		},
+		{
+			"category": "road",
+			"connections": [
+				"up",
+				"right",
+				"left"
+			],
+			"file": "tiles/road_v11.png",
+			"name": "路·up+right+left"
+		},
+		{
+			"category": "wall",
+			"connections": [
+				"up",
+				"right",
+				"left"
+			],
+			"file": "tiles/wall_v11.png",
+			"name": "墙·up+right+left"
+		},
+		{
+			"category": "road",
+			"connections": [
+				"down",
+				"left"
+			],
+			"file": "tiles/road_v12.png",
+			"name": "路·down+left"
+		},
+		{
+			"category": "wall",
+			"connections": [
+				"down",
+				"left"
+			],
+			"file": "tiles/wall_v12.png",
+			"name": "墙·down+left"
+		},
+		{
+			"category": "road",
+			"connections": [
+				"up",
+				"down",
+				"left"
+			],
+			"file": "tiles/road_v13.png",
+			"name": "路·up+down+left"
+		},
+		{
+			"category": "wall",
+			"connections": [
+				"up",
+				"down",
+				"left"
+			],
+			"file": "tiles/wall_v13.png",
+			"name": "墙·up+down+left"
+		},
+		{
+			"category": "road",
+			"connections": [
+				"right",
+				"down",
+				"left"
+			],
+			"file": "tiles/road_v14.png",
+			"name": "路·right+down+left"
+		},
+		{
+			"category": "wall",
+			"connections": [
+				"right",
+				"down",
+				"left"
+			],
+			"file": "tiles/wall_v14.png",
+			"name": "墙·right+down+left"
+		},
+		{
+			"category": "road",
+			"connections": [
+				"up",
+				"right",
+				"down",
+				"left"
+			],
+			"file": "tiles/road_v15.png",
+			"name": "路·up+right+down+left"
+		},
+		{
+			"category": "wall",
+			"connections": [
+				"up",
+				"right",
+				"down",
+				"left"
+			],
+			"file": "tiles/wall_v15.png",
+			"name": "墙·up+right+down+left"
 		}
 	],
 	"name": "演示素材包"
