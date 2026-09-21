@@ -21,6 +21,8 @@ var _grid: GridContainer
 var _empty_hint: Label
 var _selected: TextureButton
 var _buttons := {} # asset_id -> TextureButton（当前分类网格内的按钮）
+var _recent_ids: Array = [] # 最近使用（虚拟分类「最近」）
+var _favorite_ids: Array = [] # 收藏（虚拟分类「★收藏」，F 键切换）
 var _thumbs := {} # asset_id -> ImageTexture（整数倍缩放后的缩略图）
 
 ## 外部指定选中（吸管等入口）：切换到对应分类并高亮（会发 asset_selected 信号）
@@ -91,18 +93,45 @@ func _build_ui() -> void:
 	box.add_child(_empty_hint)
 
 func _populate_categories() -> void:
+	_rebuild_category_list()
+
+## 分类列表：虚拟分类（最近/★收藏）置顶，其后按固定顺序列实际分类；重入选中保持
+func _rebuild_category_list() -> void:
+	var selected_meta := ""
+	if _category_list.item_count > 0 and _category_list.get_selected_items().size() > 0:
+		selected_meta = str(_category_list.get_item_metadata(_category_list.get_selected_items()[0]))
+	_category_list.clear()
+	if not _recent_ids.is_empty():
+		_category_list.add_item("最近")
+		_category_list.set_item_metadata(_category_list.item_count - 1, "__recent")
+	if not _favorite_ids.is_empty():
+		_category_list.add_item("★收藏")
+		_category_list.set_item_metadata(_category_list.item_count - 1, "__fav")
 	var categories: Array = _library.get_categories() if _library != null else []
-	if categories.is_empty():
+	if categories.is_empty() and _recent_ids.is_empty() and _favorite_ids.is_empty():
 		_empty_hint.text = "未找到素材包\n可将自己的素材包放入\nassets/packs/ 目录"
 		_empty_hint.visible = true
 		return
-	for i in categories.size():
-		var category := str(categories[i])
-		var display: String = CATEGORY_NAMES.get(category, category)
-		_category_list.add_item(display)
-		_category_list.set_item_metadata(i, category)
+	for category in categories:
+		_category_list.add_item(str(CATEGORY_NAMES.get(str(category), str(category))))
+		_category_list.set_item_metadata(_category_list.item_count - 1, str(category))
+	for i in _category_list.item_count: # 恢复选中；原选中不存在则选第一项
+		if str(_category_list.get_item_metadata(i)) == selected_meta:
+			_category_list.select(i)
+			_on_category_selected(i)
+			return
 	_category_list.select(0)
-	_category_list.item_selected.emit(0) # 默认展开第一个分类
+	_category_list.item_selected.emit(0)
+
+## 外部注入最近使用清单（虚拟分类「最近」内容）
+func set_recent(ids: Array) -> void:
+	_recent_ids = ids.duplicate()
+	_rebuild_category_list()
+
+## 外部注入收藏清单（虚拟分类「★收藏」内容）
+func set_favorites(ids: Array) -> void:
+	_favorite_ids = ids.duplicate()
+	_rebuild_category_list()
 
 func _on_category_selected(index: int) -> void:
 	if _selected != null:
@@ -112,7 +141,16 @@ func _on_category_selected(index: int) -> void:
 		child.queue_free()
 	_buttons.clear()
 	var category := str(_category_list.get_item_metadata(index))
-	var assets: Array = _library.get_assets_by_category(category)
+	var assets: Array
+	if category == "__recent" or category == "__fav":
+		# 虚拟分类：按记录顺序映射素材（失效 id 过滤）
+		var ids := _recent_ids if category == "__recent" else _favorite_ids
+		for id in ids:
+			var asset := _library.get_asset(str(id))
+			if not asset.is_empty():
+				assets.append(asset)
+	else:
+		assets = _library.get_assets_by_category(category)
 	_empty_hint.visible = assets.is_empty()
 	for asset in assets:
 		var btn := _make_thumb_button(asset as Dictionary)

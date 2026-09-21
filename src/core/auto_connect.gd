@@ -61,6 +61,24 @@ static func pick_variant(lib: AssetLibrary, category: String, mask: int) -> Stri
 			best = str(a["id"])
 	return best
 
+## 合并方块命令变更（纯函数，可探针回归）：
+## base=直接编辑格 [{cell, old}]，extras=自动连接变更 {cell: {old_asset_id, new_asset_id}}
+## painted_asset 空串=擦除语义（重放清格）；同格以最初旧值/最终新值合并
+## 返回 [{cell, old, new}]，new 为 null 表示重放时擦除
+static func merge_tile_changes(base: Array, extras: Dictionary, painted_asset: String) -> Array:
+	var merged := {}
+	for e in base:
+		var b: Dictionary = e
+		var new_v: Variant = null if painted_asset.is_empty() else painted_asset
+		merged[b["cell"]] = {"cell": b["cell"], "old": b["old"], "new": new_v}
+	for key in extras.keys():
+		var x: Dictionary = extras[key]
+		if merged.has(key):
+			(merged[key] as Dictionary)["new"] = str(x["new_asset_id"])
+		else:
+			merged[key] = {"cell": key, "old": {"asset_id": str(x["old_asset_id"])}, "new": str(x["new_asset_id"])}
+	return merged.values()
+
 ## 落格/擦除后刷新：重算 cell 与其同类邻居的变体
 ## 返回变更清单 [{cell, old_asset_id, new_asset_id}]——已直接应用（set_tile force），
 ## 调用方把每条包进当前命令的 undo（old 恢复）/redo（new 重放）

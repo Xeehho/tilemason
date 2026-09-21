@@ -4,6 +4,8 @@ extends Node2D
 
 const DEFAULT_GRID := 16 ## 默认正式网格（px）
 const MAP_PATH := "user://map.json" ## 默认存档槽（启动自动恢复用）
+const RECENT_PATH := "user://recent.json" ## 最近使用素材（最多 10 件）
+const FAVORITES_PATH := "user://favorites.json" ## 收藏素材（F 键切换）
 const AUTOSAVE_PATH := "user://map.autosave.json" ## 自动保存档（手动档丢失时兜底恢复）
 var _current_map_path := MAP_PATH ## 当前编辑中的地图文件（打开/另存为切换，Ctrl+S 存这里）
 var _dirty := false ## 有未保存变更（命令栈活动即置位，自动保存成功复位）
@@ -40,6 +42,8 @@ var _footprint_preview: RectPreview ## 占格范围框（多格物件预览时�
 var _footprint_demo_lock := false ## 截图取证：锁定固定范围框，跳过 _process 的鼠标跟随
 var _bucket_mode := false ## G 键油漆桶（design.md §2.2）：左键填充连通同素材区域
 var _hotbar: Hotbar ## 底部快捷栏（design.md §6.2）
+var _recent: Array = [] ## 最近使用素材 id（新选中的排最前）
+var _favorites: Array = [] ## 收藏素材 id
 const HOTBAR_DEFAULT: Array = [ ## 1-7 素材位默认绑定（随演示包；用户素材包就位后可扩展自定义）
 	"demo/tiles/grass.png", "demo/tiles/road_h.png", "demo/tiles/wall_brick.png",
 	"demo/props/house.png", "demo/props/tree_small.png", "demo/props/stall_red.png",
@@ -72,7 +76,11 @@ func _ready() -> void:
 	add_child(grid)
 
 	var asset_count := _library.scan(AssetLibrary.default_roots())
+	_recent = _load_id_list(RECENT_PATH)
+	_favorites = _load_id_list(FAVORITES_PATH)
 	_build_asset_panel()
+	_panel.set_recent(_recent)
+	_panel.set_favorites(_favorites)
 
 	# 启动自动恢复：手动档优先，手动档丢失时从自动保存档兜底（design.md §10 恢复上一版本最小版）
 	if FileAccess.file_exists(MAP_PATH):
@@ -210,6 +218,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_toggle_line_mode()
 		elif key.keycode == KEY_G and not key.ctrl_pressed:
 			_toggle_bucket_mode()
+		elif key.keycode == KEY_F and not key.ctrl_pressed:
+			_toggle_favorite()
 		elif key.keycode >= KEY_1 and key.keycode <= KEY_9:
 			_hotbar_activate(key.keycode - KEY_1)
 		elif key.keycode == KEY_ESCAPE:
@@ -749,6 +759,41 @@ func _select_all() -> void:
 				cells[layer_id] = coords
 	_apply_selection(ids, cells)
 
+## 最近使用：新选中排最前、去重、最多 10 件，落盘并刷新面板
+func _push_recent(asset_id: String) -> void:
+	_recent.erase(asset_id)
+	_recent.push_front(asset_id)
+	if _recent.size() > 10:
+		_recent.resize(10)
+	_save_id_list(RECENT_PATH, _recent)
+	_panel.set_recent(_recent)
+
+## F 键收藏/取消收藏当前选中素材
+func _toggle_favorite() -> void:
+	if _selected_asset_id.is_empty():
+		return
+	if _favorites.has(_selected_asset_id):
+		_favorites.erase(_selected_asset_id)
+		print("[TileMason] 已取消收藏")
+	else:
+		_favorites.push_back(_selected_asset_id)
+		print("[TileMason] 已加入收藏")
+	_save_id_list(FAVORITES_PATH, _favorites)
+	_panel.set_favorites(_favorites)
+
+## 简易 id 清单持久化（JSON 数组）
+func _load_id_list(path: String) -> Array:
+	if not FileAccess.file_exists(path):
+		return []
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	return (parsed as Array).duplicate() if parsed is Array else []
+
+func _save_id_list(path: String, ids: Array) -> void:
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f != null:
+		f.store_string(JSON.stringify(ids, "	"))
+		f = null
+
 ## 底部快捷栏（design.md §6.2）：居中悬于状态栏上方
 func _build_hotbar() -> void:
 	var layer_ui := CanvasLayer.new()
@@ -819,18 +864,7 @@ func _harvest_refresh(layer_id: String, cell: Vector2i, store: Dictionary) -> vo
 func _push_tile_command(cmd_name: String, layer_id: String, base: Array, extras: Dictionary, painted_asset: String) -> void:
 	if base.is_empty() and extras.is_empty():
 		return
-	var merged := {}
-	for e in base:
-		var b: Dictionary = e
-		var new_v: Variant = null if painted_asset.is_empty() else painted_asset
-		merged[b["cell"]] = {"old": b["old"], "new": new_v}
-	for key in extras.keys():
-		var x: Dictionary = extras[key]
-		if merged.has(key):
-			(merged[key] as Dictionary)["new"] = str(x["new_asset_id"])
-		else:
-			merged[key] = {"old": {"asset_id": str(x["old_asset_id"])}, "new": str(x["new_asset_id"])}
-	var entries: Array = merged.values()
+	var entries: Array = AutoConnect.merge_tile_changes(base, extras, painted_asset)
 	var do_cmd := func() -> void:
 		for e in entries:
 			var ee: Dictionary = e
@@ -1039,6 +1073,7 @@ func _on_asset_selected(asset_id: String) -> void:
 	var asset := _library.get_asset(asset_id)
 	if not asset.is_empty():
 		print("[TileMason] 选中素材：%s（%s · %s）" % [asset["name"], asset_id, asset["category"]])
+		_push_recent(asset_id)
 	refresh_status()
 
 ## 底部状态栏：全宽停靠，常驻显示当前操作状态
@@ -1118,7 +1153,8 @@ func _eraser_layer_name() -> String:
 func _capture_screenshot() -> void:
 	_demo_place_for_screenshot()
 	# 选中建筑并把鼠标移到画布空位：截图中展示半透明放置预览
-	_selected_asset_id = "demo/props/house.png"
+	# 走面板选中链路（同步产生「最近使用」记录）
+	_panel.select_asset("demo/props/house.png")
 	get_viewport().warp_mouse(Vector2(150, 330))
 	# 确定性取证：warp 在后台窗口下不稳定，固定画一个范围框（世界 256,256 起占 6×6 格）
 	_footprint_demo_lock = true

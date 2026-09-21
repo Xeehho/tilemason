@@ -21,6 +21,7 @@ func _init() -> void:
 	_test_neighbor_mask(doc, lib)
 	_test_pick_variant(lib)
 	_test_refresh(doc, lib)
+	_test_merge()
 	_cleanup()
 	print("[TileMason] 探针结束：通过 %d / 失败 %d" % [_pass, _fail])
 	quit(0 if _fail == 0 else 1)
@@ -77,6 +78,33 @@ func _test_refresh(doc: MapDocument, lib: AssetLibrary) -> void:
 	for c in changes:
 		doc.set_tile("ground", (c as Dictionary)["cell"], str((c as Dictionary)["old_asset_id"]), true)
 	_check(doc.get_tile("ground", Vector2i(1, 0))["asset_id"] == "ac/tiles/road_straight.png", "按清单撤销还原")
+
+func _test_merge() -> void:
+	# 回归：合并条目必须带 cell 键（曾因丢键致所有方块命令运行时报错，check-only 查不出）
+	var base := [{"cell": Vector2i(1, 0), "old": {"asset_id": "a"}}, {"cell": Vector2i(2, 0), "old": {}}]
+	var extras := {
+		Vector2i(1, 0): {"cell": Vector2i(1, 0), "old_asset_id": "a", "new_asset_id": "v12"},
+		Vector2i(9, 9): {"cell": Vector2i(9, 9), "old_asset_id": "b", "new_asset_id": "v3"},
+	}
+	var entries: Array = AutoConnect.merge_tile_changes(base, extras, "a")
+	_check(entries.size() == 3, "合并去重 3 条（同格并 1）")
+	var all_have_cell := true
+	var cell1_new := ""
+	for e in entries:
+		var ee: Dictionary = e
+		if not ee.has("cell"):
+			all_have_cell = false
+		if (ee["cell"] as Vector2i) == Vector2i(1, 0):
+			cell1_new = str(ee["new"])
+	_check(all_have_cell, "每条都带 cell 键（回归）")
+	_check(cell1_new == "v12", "同格取最终新值（变体覆盖）")
+	# 擦除语义：new 为 null
+	var e2: Array = AutoConnect.merge_tile_changes([{"cell": Vector2i(0, 0), "old": {"asset_id": "x"}}], {}, "")
+	_check((e2[0] as Dictionary)["new"] == null, "擦除语义 new=null")
+	# 纯刷新格：old 由 extras 提供
+	var e3: Array = AutoConnect.merge_tile_changes([], {Vector2i(5, 5): {"cell": Vector2i(5, 5), "old_asset_id": "b", "new_asset_id": "c"}}, "z")
+	var first: Dictionary = e3[0]
+	_check(str((first["old"] as Dictionary)["asset_id"]) == "b" and str(first["new"]) == "c", "纯刷新格旧新值正确")
 
 func _setup_fixtures() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(FIXTURE_ROOT + "/tiles"))
