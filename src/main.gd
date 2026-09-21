@@ -195,7 +195,23 @@ func _covers_road(cell_tl: Vector2i, cells: Vector2i) -> bool:
 	return false
 
 func _mouse_over_panel() -> bool:
+	if _panel == null or not _panel.visible:
+		return false # Tab 隐藏素材面板后矩形仍缓存——隐藏即把原区域还给画布
 	return _panel.get_global_rect().has_point(_panel.get_global_mouse_position())
+
+## Tab 显隐素材库：须在 GUI 焦点导航消费前拦截（_input 层）——
+## 点过任意按钮后 Tab 走焦点切换，_unhandled_input 收不到（实测复现）；
+## 文本输入框/标签输入模式中保留 Tab 原有行为
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey and (event as InputEventKey).pressed and not (event as InputEventKey).echo 			and (event as InputEventKey).keycode == KEY_TAB:
+		if _tag_input_mode or _panel == null:
+			return
+		var focus := get_viewport().gui_get_focus_owner()
+		if focus is LineEdit or focus is TextEdit:
+			return # 搜索框/重命名框中不抢 Tab
+		_panel.visible = not _panel.visible # design.md §6.3 Tab 显隐素材库
+		print("[TileMason] 素材面板：%s" % ("显示" if _panel.visible else "隐藏（Tab 再显）"))
+		get_viewport().set_input_as_handled()
 
 ## 左键=放置（方块按住拖刷、物件单击），右键=吸管（design.md §6.3）
 func _unhandled_input(event: InputEvent) -> void:
@@ -282,9 +298,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_batch_replace_under_mouse()
 		elif key.keycode == KEY_T and not key.ctrl_pressed:
 			_begin_tag_input()
-		elif key.keycode == KEY_TAB:
-			_panel.visible = not _panel.visible # design.md §6.3 Tab 显隐素材库
-			print("[TileMason] 素材面板：%s" % ("显示" if _panel.visible else "隐藏（Tab 再显）"))
+		# Tab 显隐面板移至 _input（焦点导航会在 _unhandled 前消费 Tab——点过按钮后热键失效，实测踩中）
 		elif key.keycode == KEY_Q and not key.ctrl_pressed:
 			_focus_selection() # design.md §6.3 F 聚焦——F 被收藏占用，用 Q 近旁键位
 		elif key.keycode >= KEY_1 and key.keycode <= KEY_7:
@@ -1306,8 +1320,8 @@ func _toggle_eraser() -> void:
 ## ③ 选中素材的目标层（原语义降为兜底）④ ground
 func _eraser_layer() -> String:
 	var active := _layer_panel.active_layer()
-	if not active.is_empty():
-		return active
+	if not active.is_empty() and not _document.get_layer(active).is_empty():
+		return active # 活动层已删除时不再返回悬空 id（下游空字典取键会崩）
 	var probe := mouse_cell()
 	var layers: Array = _document.get_layers()
 	for i in range(layers.size() - 1, -1, -1): # 末层=最高层级，自上而下找首个有内容的
@@ -1330,10 +1344,13 @@ func _begin_erase() -> void:
 	if _mouse_over_panel():
 		return
 	var layer := _eraser_layer()
+	var layer_dict := _document.get_layer(layer)
+	if layer_dict.is_empty():
+		return # 层不存在（防御：路由不应产出，但空字典取键会崩）
 	if _document.is_layer_locked(layer):
 		print("[TileMason] 图层已锁定，无法擦除：%s" % layer)
 		return
-	if _document.get_layer(layer)["type"] == "object":
+	if layer_dict["type"] == "object":
 		_erase_object_at(mouse_cell(), layer)
 		return
 	_erase_layer = layer

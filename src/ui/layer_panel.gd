@@ -51,6 +51,8 @@ func setup(doc: MapDocument) -> void:
 		_document.object_added.connect(_on_content_changed)
 	if not _document.object_removed.is_connected(_on_content_changed):
 		_document.object_removed.connect(_on_content_changed)
+	if not _document.object_changed.is_connected(_on_content_changed):
+		_document.object_changed.connect(_on_content_changed) # 物件替换/跨层移动也影响计数
 
 func _on_content_changed(_a = null, _b = null) -> void:
 	for id in _rows.keys():
@@ -63,6 +65,8 @@ func _on_layer_changed(layer_id: String, key: String) -> void:
 		_on_restructured()
 
 func _on_restructured() -> void:
+	if not _active_layer.is_empty() and _document.get_layer(_active_layer).is_empty():
+		_active_layer = "" # 活动层已被删除：清引用，否则擦除/放置路由到不存在的层
 	_rebuild_rows()
 
 ## 全量重建行（视觉自顶向下=列表倒序：末层显示在最上）

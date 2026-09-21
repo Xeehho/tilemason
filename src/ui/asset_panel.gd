@@ -286,8 +286,9 @@ func _make_thumb_button(asset: Dictionary) -> TextureButton:
 	return btn
 
 func _on_thumb_pressed(btn: TextureButton, asset_id: String) -> void:
-	if _selected != null:
-		_selected.modulate = Color.WHITE
+	if _selected != null and is_instance_valid(_selected):
+		_selected.modulate = Color.WHITE # 切分类重建缩略图后旧引用已释放（帧末 queue_free），须校验
+
 	_selected = btn
 	btn.modulate = Color(1.0, 0.9, 0.5) # 选中高亮
 	asset_selected.emit(asset_id)
