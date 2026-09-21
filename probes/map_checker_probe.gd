@@ -82,6 +82,16 @@ func _init() -> void:
 	doc2d.add_object({"asset_id": building, "layer": "building", "cell": Vector2i(3, 0)})
 	_check(MapChecker.check_collision_overlaps(doc2d, lib).is_empty(), "相邻摆放不重叠")
 
+	# 悬空素材：文档里引用素材库没有的 id（方块+物件双路径）
+	var docm := MapDocument.new()
+	docm.set_tile("ground", Vector2i(0, 0), "nope/missing.png")
+	docm.add_object({"asset_id": "nope/prop.png", "layer": "building", "cell": Vector2i(0, 0)})
+	var miss := MapChecker.check_missing_assets(docm, lib)
+	_check(miss.size() == 2 and miss[0]["type"] == "missing_asset", "悬空素材方块+物件各报一条")
+	var docok := MapDocument.new()
+	docok.set_tile("ground", Vector2i(0, 0), road)
+	_check(MapChecker.check_missing_assets(docok, lib).is_empty(), "素材齐全不误报")
+
 	# 场景六：无道路 → 不误报
 	doc = MapDocument.new()
 	issues = MapChecker.check_all(doc, lib)

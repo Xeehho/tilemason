@@ -11,6 +11,7 @@ static func check_all(doc: MapDocument, lib: AssetLibrary) -> Array:
 	issues.append_array(check_blocking(doc, lib))
 	issues.append_array(check_enclosed_regions(doc, lib))
 	issues.append_array(check_collision_overlaps(doc, lib))
+	issues.append_array(check_missing_assets(doc, lib))
 	return issues
 
 ## 道路连通性：全部道路格应为一个 4 邻接连通块
@@ -70,6 +71,32 @@ static func check_blocking(doc: MapDocument, lib: AssetLibrary) -> Array:
 					})
 					blocked = true # 一个建筑只报一次
 					break
+	return issues
+
+## 悬空素材（design.md §10 资源完整性）：素材库中查无此 id 的方块/物件——
+## 素材包被移走/改名/清单漏登记都会产生，导出前必须暴露
+static func check_missing_assets(doc: MapDocument, lib: AssetLibrary) -> Array:
+	var issues := []
+	for layer in doc.get_layers():
+		var layer_id := str((layer as Dictionary)["id"])
+		if str((layer as Dictionary)["type"]) != "tile":
+			continue
+		for coords in doc.get_tile_coords(layer_id):
+			var entry := doc.get_tile(layer_id, coords as Vector2i)
+			var asset := lib.get_asset(str(entry.get("asset_id", "")))
+			if asset.is_empty():
+				issues.append({
+					"type": "missing_asset",
+					"message": "方块素材缺失（层 %s 格 %s）：%s" % [layer_id, str(coords), str(entry.get("asset_id", ""))],
+				})
+	for obj in doc.get_objects():
+		var o := obj as Dictionary
+		var asset := lib.get_asset(str(o["asset_id"]))
+		if asset.is_empty():
+			issues.append({
+				"type": "missing_asset",
+				"message": "物件素材缺失（id=%d）：%s" % [int(o["id"]), str(o["asset_id"])],
+			})
 	return issues
 
 ## 孤立区域（design.md §8）：被内容完全围住、与地图外缘不连通的空格群
