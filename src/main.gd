@@ -307,13 +307,34 @@ func _run_map_check() -> void:
 		print("[TileMason] [检查] %s" % str((issue as Dictionary)["message"]))
 
 ## 保存当前地图到当前文件（design.md §10；另存为走 _save_as_dialog）
+## 手动保存自动留最近 5 版历史（map.1..map.5，最旧丢弃）——「恢复上一版本」
+## 的版本来源；打开对话框选 map.N.json 即可回滚任意历史版
 func _save_map() -> void:
+	if FileAccess.file_exists(_current_map_path):
+		_rotate_history()
 	if _document.save_to_file(_current_map_path):
 		_dirty = false
 		var tiles := 0
 		for layer in _document.get_layers():
 			tiles += _document.get_tile_coords(str((layer as Dictionary)["id"])).size()
 		print("[TileMason] 已保存：%s（%d 方块，%d 物件）" % [_current_map_path, tiles, _document.get_objects().size()])
+
+## 版本轮转：map.json → map.1.json → … → map.5.json（最旧丢弃）
+func _rotate_history() -> void:
+	var base_dir := _current_map_path.get_base_dir() + "/"
+	var stem := _current_map_path.get_file().get_basename()
+	for i in range(4, 0, -1):
+		var from := base_dir + stem + ".%d.json" % i
+		var to := base_dir + stem + ".%d.json" % (i + 1)
+		if FileAccess.file_exists(from):
+			DirAccess.copy_absolute(ProjectSettings.globalize_path(from), ProjectSettings.globalize_path(to))
+	DirAccess.copy_absolute(ProjectSettings.globalize_path(_current_map_path), ProjectSettings.globalize_path(base_dir + stem + ".1.json"))
+	# 超过 5 版清尾
+	var tail := base_dir + stem + ".6.json"
+	if FileAccess.file_exists(tail):
+		var dir := DirAccess.open(base_dir)
+		if dir != null:
+			dir.remove(stem + ".6.json")
 
 ## 载入地图：替换文档并重建视图；manual=false 用于启动静默载入
 func _load_map(manual: bool) -> void:
@@ -1180,6 +1201,13 @@ func _begin_erase() -> void:
 func _erase_to(cell: Vector2i) -> void:
 	if cell == _last_cell:
 		return
+	# 高级选项（design.md §5「只清除当前素材类型」）：按住 Ctrl 擦除时
+	# 只清与当前选中素材同款的格（其余内容原样保留）
+	if Input.is_key_pressed(KEY_CTRL) and not _selected_asset_id.is_empty():
+		var entry := _document.get_tile(_erase_layer, cell)
+		if entry.is_empty() or str(entry.get("asset_id", "")) != _selected_asset_id:
+			_last_cell = cell # 记录去重但不写入（避免重复查询）
+			return
 	var old: Variant = _document.erase_tile(_erase_layer, cell)
 	if old == null:
 		return
@@ -1385,7 +1413,7 @@ func refresh_status() -> void:
 	if _bucket_mode:
 		tool = "油漆桶（左键填充连通同素材区域，G 退出）"
 	if _eraser_mode:
-		tool = "橡皮擦（清「%s」层，左键/拖动/E 退出）" % _eraser_layer_name()
+		tool = "橡皮擦（清「%s」层；+Ctrl 只清当前素材同款；E 退出）" % _eraser_layer_name()
 	elif _select_mode:
 		tool = "选择（拖框选 · 拖动移动 · Ctrl+C/V 复制粘贴 · H 镜像 · Del 删除）"
 	elif _line_mode:
