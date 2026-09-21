@@ -43,6 +43,7 @@ var _footprint_demo_lock := false ## 截图取证：锁定固定范围框，跳�
 var _bucket_mode := false ## G 键油漆桶（design.md §2.2）：左键填充连通同素材区域
 var _current_prefab := "" ## 当前预制件名（Ctrl+P 保存并选定、P 放置）
 var _prefab_panel: PrefabPanel ## 预制件面板（列表/选用/删除）
+var _toolbar: Toolbar ## 顶部工具栏（当前工具高亮）
 var _tags := {} ## 素材标签表 {asset_id: [tag...]}（T 键编辑，user://tags.json）
 var _tag_input_mode := false ## T 键标签输入模式（状态栏输入行，Enter/Esc）
 var _tag_input_text := "" ## 输入缓冲
@@ -97,6 +98,7 @@ func _ready() -> void:
 			_current_map_path = MAP_PATH # 继续编辑仍指向手动档槽位
 			print("[TileMason] 手动档缺失，已从自动保存恢复")
 
+	_build_toolbar()
 	_build_layer_panel()
 	_build_status_bar()
 	_build_hotbar()
@@ -1339,6 +1341,72 @@ func _place_asset(asset: Dictionary, cell: Vector2i) -> void:
 				_document.remove_object(int(obj["id"]), true)
 		_commands.push("放置 %s" % str(asset["name"]), do_add, undo_add)
 
+## 顶部工具栏：左上角横排（当前工具图标高亮，反馈「按了键不知道在什么模式」的正解）
+func _build_toolbar() -> void:
+	var layer_ui := CanvasLayer.new()
+	layer_ui.layer = 10
+	add_child(layer_ui)
+	_toolbar = Toolbar.new()
+	_toolbar.setup()
+	_toolbar.tool_requested.connect(_toolbar_action)
+	layer_ui.add_child(_toolbar)
+	_toolbar.anchor_left = 0.0
+	_toolbar.anchor_right = 0.0
+	_toolbar.anchor_top = 0.0
+	_toolbar.anchor_bottom = 0.0
+	_toolbar.offset_left = 200 # 让开左侧图层面板
+	_toolbar.offset_right = 560
+	_toolbar.offset_top = 4
+	_toolbar.offset_bottom = 48
+
+## 工具栏点击 → 分发到既有模式切换；同时刷新高亮
+func _toolbar_action(tool_id: String) -> void:
+	match tool_id:
+		"pen":
+			if _eraser_mode:
+				_toggle_eraser()
+			if _select_mode:
+				_exit_select_mode()
+			if _line_mode:
+				_exit_line_mode()
+			if _bucket_mode:
+				_toggle_bucket_mode()
+			print("[TileMason] 工具：画笔")
+		"line":
+			if not _line_mode:
+				_toggle_line_mode()
+		"rect":
+			print("[TileMason] 矩形填充：按住 Ctrl 左键拖框（+Shift 跳过已有）")
+		"bucket":
+			if not _bucket_mode:
+				_toggle_bucket_mode()
+		"eraser":
+			if not _eraser_mode:
+				_toggle_eraser()
+		"select":
+			if not _select_mode:
+				_toggle_select_mode()
+		"eyedrop":
+			print("[TileMason] 吸管：在画布上右键即可吸取素材")
+		"prefab":
+			print("[TileMason] 预制件：框选内容后 Ctrl+P 保存，P 放置（左下面板管理）")
+	_refresh_toolbar()
+
+## 汇总当前活动工具，刷新工具栏高亮（任何模式切换后经 refresh_status 联动）
+func _refresh_toolbar() -> void:
+	if _toolbar == null:
+		return
+	var id := "pen"
+	if _eraser_mode:
+		id = "eraser"
+	elif _select_mode:
+		id = "select"
+	elif _line_mode:
+		id = "line"
+	elif _bucket_mode:
+		id = "bucket"
+	_toolbar.set_active(id)
+
 ## 素材面板：右侧全高停靠（design.md §6.1 最小版）
 func _build_asset_panel() -> void:
 	var layer := CanvasLayer.new()
@@ -1421,6 +1489,7 @@ func _build_status_bar() -> void:
 
 ## 汇总当前状态刷到状态栏（任何工具/素材变化后调用）
 func refresh_status() -> void:
+	_refresh_toolbar() # 工具栏高亮与状态栏同步刷新
 	if _status == null:
 		return
 	var tool := "画笔（左键放置/拖刷，Shift 单块）"
