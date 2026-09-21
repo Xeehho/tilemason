@@ -42,7 +42,8 @@ var _footprint_preview: RectPreview ## 占格范围框（多格物件预览时�
 var _footprint_demo_lock := false ## 截图取证：锁定固定范围框，跳过 _process 的鼠标跟随
 var _bucket_mode := false ## G 键油漆桶（design.md §2.2）：左键填充连通同素材区域
 var _current_prefab := "" ## 当前预制件名（Ctrl+P 保存并选定、P 放置）
-var _prefab_panel: PrefabPanel ## 预制件面板（列表/选用/删除）
+var _prefab_panel: PrefabPanel ## 预制件面板（左 Dock 页签：列表/选用/删除）
+var _check_panel: CheckPanel ## 地图检查页签（F9 结果展示/页内重跑）
 var _layer_panel: LayerPanel ## 图层面板（载入新文档时重绑）
 var _toolbar: Toolbar ## 顶部工具栏（当前工具高亮）
 var _app_theme: Theme ## 全局统一主题（零依赖自绘，挂各 UI 根）
@@ -313,6 +314,66 @@ func _unhandled_input(event: InputEvent) -> void:
 			_run_map_check()
 		elif key.keycode == KEY_F8:
 			_show_connection_rules()
+		elif key.keycode == KEY_F1:
+			_show_shortcut_help() # 快捷键帮助浮层（UI 重构阶段 B：速记串移出状态栏）
+
+## F9：地图检查——结果写入左 Dock「检查」页签并自动跳页（UI 重构阶段 C §5.2）
+func _run_map_check() -> void:
+	var issues := MapChecker.check_all(_document, _library)
+	if _check_panel != null:
+		_check_panel.show_results(issues)
+		if _shell != null:
+			_shell.select_left_tab("检查")
+	if issues.is_empty():
+		print("[TileMason] 地图检查通过：道路连通，无建筑堵路")
+		return
+	for issue in issues:
+		print("[TileMason] [检查] %s" % str((issue as Dictionary)["message"]))
+
+## F1/状态栏 ?：快捷键帮助浮层（分组清单；速记串不再常驻状态栏）
+func _show_shortcut_help() -> void:
+	var dlg := AcceptDialog.new()
+	dlg.title = "快捷键"
+	dlg.ok_button_text = "关闭"
+	dlg.theme = _app_theme
+	var panel := PanelContainer.new()
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 16)
+	margin.add_theme_constant_override("margin_right", 16)
+	margin.add_theme_constant_override("margin_top", 12)
+	margin.add_theme_constant_override("margin_bottom", 12)
+	panel.add_child(margin)
+	var cols := HBoxContainer.new()
+	cols.add_theme_constant_override("separation", 28)
+	margin.add_child(cols)
+	var groups: Array = [
+		["工具", ["E 橡皮擦（+Ctrl 只清同款）", "S 选择（框选/移动/复制）", "L 直线", "G 油漆桶", "Ctrl+左键 矩形填充", "画布右键 吸管", "Tab 显隐素材面板"]],
+		["编辑", ["Ctrl+Z / Ctrl+Y 撤销 / 重做", "Ctrl+C / Ctrl+V 复制 / 粘贴", "Ctrl+A 全选 · Del 删除", "H 镜像 · R 同款替换", "T 标签 · F 收藏", "Q 聚焦选中内容"]],
+		["放置", ["左键放置/拖刷（Shift 单块）", "1-7 快捷栏素材槽（右键换绑）", "Ctrl+P 存预制件 · P 放置", "中键/空格+左键 平移 · 滚轮缩放"]],
+		["文件与检查", ["Ctrl+S 保存 · Ctrl+Shift+S 另存", "Ctrl+O 打开 · Ctrl+L 重载", "F8 连接规则 · F9 地图检查", "Ctrl+E 导出场景 · F1 本帮助"]],
+	]
+	for group in groups:
+		var g: Array = group
+		var col := VBoxContainer.new()
+		col.add_theme_constant_override("separation", 2)
+		cols.add_child(col)
+		var head := Label.new()
+		head.text = str(g[0])
+		head.add_theme_font_size_override("font_size", 14)
+		head.modulate = AppTheme.ACCENT
+		col.add_child(head)
+		for item in (g[1] as Array):
+			var lab := Label.new()
+			lab.text = str(item)
+			lab.add_theme_font_size_override("font_size", 13)
+			lab.modulate = AppTheme.TEXT_DIM
+			col.add_child(lab)
+	dlg.add_child(panel)
+	add_child(dlg)
+	dlg.visibility_changed.connect(func() -> void:
+		if not dlg.visible:
+			dlg.queue_free())
+	dlg.popup_centered(Vector2i(760, 320))
 
 ## F8：连接规则查看（design.md §2.2 只读版，P3）——弹窗展示素材包声明的连接规则
 func _show_connection_rules() -> void:
@@ -326,15 +387,6 @@ func _show_connection_rules() -> void:
 	for rule in viewer.rules:
 		declared += ((rule as Dictionary)["assets"] as Array).size()
 	print("[TileMason] 连接规则查看：%d 个分类、%d 件声明连接素材" % [viewer.rules.size(), declared])
-
-## F9：导出前地图检查（design.md §8 最小版，验收 9）
-func _run_map_check() -> void:
-	var issues := MapChecker.check_all(_document, _library)
-	if issues.is_empty():
-		print("[TileMason] 地图检查通过：道路连通，无建筑堵路")
-		return
-	for issue in issues:
-		print("[TileMason] [检查] %s" % str((issue as Dictionary)["message"]))
 
 ## 保存当前地图到当前文件（design.md §10；另存为走 _save_as_dialog）
 ## 手动保存自动留最近 5 版历史（map.1..map.5，最旧丢弃）——「恢复上一版本」
@@ -1476,14 +1528,20 @@ func _build_layer_panel() -> void:
 	_layer_panel.setup(_document)
 	if not _layer_panel.layer_activity_requested.is_connected(_on_active_layer):
 		_layer_panel.layer_activity_requested.connect(_on_active_layer)
-	_shell.mount_left_top(_layer_panel) # 壳层左 Dock 上槽
+	_shell.mount_left_tab(_layer_panel, "图层") # 左 Dock 页签（阶段 C §5.2）
 	if _prefab_panel == null:
 		_prefab_panel = PrefabPanel.new()
 		_prefab_panel.setup()
 		_prefab_panel.prefab_chosen.connect(_choose_prefab)
 		_prefab_panel.prefab_deleted.connect(_delete_prefab)
 		_prefab_panel.refresh(_current_prefab)
-		_shell.mount_left_bottom(_prefab_panel) # 壳层左 Dock 下槽
+	_shell.mount_left_tab(_prefab_panel, "预制件")
+	if _check_panel == null: # 检查页签（F9 结果落位；mount 幂等不换页序）
+		_check_panel = CheckPanel.new()
+		_check_panel.theme = _app_theme
+		_check_panel.setup()
+		_check_panel.check_rerun_requested.connect(_run_map_check)
+		_shell.mount_left_tab(_check_panel, "检查")
 
 ## 重扫素材库（面板「⟳ 刷新」）：放文件后即时生效，无须重启
 func _rescan_library() -> void:
@@ -1502,23 +1560,13 @@ func _on_asset_selected(asset_id: String) -> void:
 		_push_recent(asset_id)
 	refresh_status()
 
-## 底部状态栏：全宽停靠，常驻显示当前操作状态
+## 底部状态栏：壳层独立安全区（阶段 A 收尾：状态栏也入壳，弃最后一处 CanvasLayer 绝对偏移）
 func _build_status_bar() -> void:
-	var layer_ui := CanvasLayer.new()
-	layer_ui.layer = 10
-	add_child(layer_ui)
 	_status = StatusBar.new()
 	_status.setup()
 	_status.theme = _app_theme
-	layer_ui.add_child(_status)
-	_status.anchor_left = 0.0
-	_status.anchor_right = 1.0
-	_status.anchor_top = 1.0
-	_status.anchor_bottom = 1.0
-	_status.offset_left = 0
-	_status.offset_right = 0
-	_status.offset_top = -26
-	_status.offset_bottom = 0
+	_status.help_requested.connect(_show_shortcut_help) # ? 按钮 = F1 同款帮助浮层
+	_shell.mount_status(_status)
 
 ## 汇总当前状态刷到状态栏（任何工具/素材变化后调用）
 func refresh_status() -> void:
@@ -1546,9 +1594,9 @@ func refresh_status() -> void:
 			asset_text = "%s → 落在「%s」%s" % [asset["name"], layer_name, lock_hint]
 	var file_name := _current_map_path.get_file()
 	var pos_text := "(%d,%d)" % [mouse_cell().x, mouse_cell().y]
-	var dirty_mark := " ●未保存" if _dirty else ""
-	# 状态栏拆段（阶段 B）：只留四段状态+文件脏标记；快捷键速记移至 ? 帮助（H 键/F1 弹出）
-	_status.set_line("坐标 %s ｜ %s ｜ 素材：%s ｜ 文件：%s%s" % [pos_text, tool, asset_text, file_name, dirty_mark])
+	# 状态栏拆四段（§5.5）：坐标|工具|素材|文件；脏标记与快捷键帮助分离
+	_status.set_segments(pos_text, tool, asset_text, file_name)
+	_status.set_dirty(_dirty)
 
 ## 图层属性变化影响素材落层提示（锁定警示），载入新文档后重连
 func _connect_status_signals() -> void:

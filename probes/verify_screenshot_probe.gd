@@ -16,8 +16,17 @@ const EXTRA_PROOF_COLORS: Array = [
 	Color("3d8a30"), # 树冠绿
 	Color("d9c08b"), # 房墙米黄
 ]
-const PANEL_WIDTH := 380 ## 与 main.gd 停靠宽度一致
+## 壳层布局宽（UI 重构阶段 A/D）：按截图宽自动分支标准/紧凑档
+## 标准 1600×900：右 400/左 250；紧凑 1280×720（--resolution 1280x720）：右 320/左 224
+const PANEL_WIDTH_STD := 400
+const PANEL_WIDTH_COMPACT := 320
+const LEFT_DOCK_STD := 250
+const LEFT_DOCK_COMPACT := 224
+const COMPACT_BREAK := 1400 ## 与 editor_shell.gd 一致
 const COLOR_DIST := 0.07 ## 允许的色彩偏差（sRGB 渲染/抗锯齿）
+
+var panel_width := PANEL_WIDTH_STD ## 本张截图对应的右 Dock 宽
+var left_dock_width := LEFT_DOCK_STD ## 本张截图对应的左 Dock 宽
 
 var _pass := 0
 var _fail := 0
@@ -31,15 +40,19 @@ func _init() -> void:
 		return
 	var img := Image.load_from_file(ProjectSettings.globalize_path(SHOT_PATH))
 	_check(img != null and img.get_width() >= 800, "截图分辨率正常（>=800 宽）")
+	if img != null and img.get_width() < COMPACT_BREAK:
+		panel_width = PANEL_WIDTH_COMPACT # 紧凑档截图（1280×720 取证）
+		left_dock_width = LEFT_DOCK_COMPACT
 	if img == null:
 		_finish()
 		return
 	_test_panel_region(img)
 	_test_canvas_region(img)
+	_test_layout_regions(img) # UI 重构阶段 D：壳层布局回归（Dock 底色/Divider 可见）
 	_finish()
 
 func _test_panel_region(img: Image) -> void:
-	var panel_left := img.get_width() - PANEL_WIDTH
+	var panel_left := img.get_width() - panel_width
 	var hits: Dictionary = {}
 	for color in PANEL_PROOF_COLORS:
 		hits[(color as Color).to_html()] = 0
@@ -62,7 +75,7 @@ func _test_panel_region(img: Image) -> void:
 
 func _test_canvas_region(img: Image) -> void:
 	# 画布区：扫描整列像素，网格线（每 16px 一条）应带来亮度波动；单行采样可能恰好落在两线之间
-	var panel_left := img.get_width() - PANEL_WIDTH - 20
+	var panel_left := img.get_width() - panel_width - 20
 	var probe_x := mini(200, panel_left - 1)
 	var values: Array = []
 	for y in range(0, img.get_height()):
@@ -75,6 +88,10 @@ func _test_canvas_region(img: Image) -> void:
 	_check(road > 40, "画布区出现道路（道路灰像素 %d > 40）" % road)
 	var roof := _count_region(img, 0, panel_left, Color("8b3a2f"))
 	_check(roof > 40, "画布区出现建筑屋顶（砖红像素 %d > 40）" % roof)
+	# 以下三条按 1600×900 标准档相机取景写死屏幕坐标——紧凑档画布偏移投影不同，仅标准档取证
+	#（紧凑档布局正确性由 _test_layout_regions 的 Dock/Divider 断言覆盖）
+	if img.get_width() < COMPACT_BREAK:
+		return
 	# 占格范围框：截图模式在世界 (256,256) 固定画 96×96 绿框 → 屏幕 (1056..1152, 706..802)
 	var green := 0
 	for y in range(695, 815):
@@ -89,6 +106,29 @@ func _test_canvas_region(img: Image) -> void:
 	var endcap_px := img.get_pixel(800 - 47, 450 + 72)
 	_check(corner_px.r < 0.25 and corner_px.g < 0.25, "L 拐角自动变弯道（右中=路缘深色）")
 	_check(endcap_px.r < 0.25 and endcap_px.g < 0.25, "端头自动变端头变体（左中=路缘深色）")
+
+## 壳层布局回归（UI 重构阶段 D）：左右 Dock 安全区底色 + 槽位 Divider 线可见
+func _test_layout_regions(img: Image) -> void:
+	# 左 Dock（TabContainer）区域主色 = Surface-1 #26262c（y 起点 60 避开 tab 条与圆角）
+	var left_hits := _count_region(img, 4, left_dock_width - 4, Color("26262c"))
+	var left_total := ((left_dock_width - 8) / 2) * ((img.get_height() - 100) / 2)
+	_check(left_hits > left_total * 0.3, "左 Dock 面板底色（#26262c 占比 %.0f%% > 30%%）" % (100.0 * left_hits / maxi(left_total, 1)))
+	# 右 Dock 主色同断言（避开缩略图特征色区，取中段高度）
+	var right_hits := _count_region(img, img.get_width() - panel_width + 4, img.get_width(), Color("26262c"))
+	var right_total := ((panel_width - 4) / 2) * ((img.get_height() - 100) / 2)
+	_check(right_hits > right_total * 0.3, "右 Dock 面板底色（#26262c 占比 %.0f%% > 30%%）" % (100.0 * right_hits / maxi(right_total, 1)))
+	# Divider 线：左 Dock 右缘竖线 #555761（扫描 3 列，任一列命中即算可见）
+	var divider_col := -1
+	for dx in 3:
+		var xx := left_dock_width - 1 + dx
+		var cnt := 0
+		for yy in range(200, 500, 2):
+			if _near(img.get_pixel(xx, yy), Color("555761")):
+				cnt += 1
+		if cnt > 50:
+			divider_col = xx
+			break
+	_check(divider_col >= 0, "左 Dock 分隔线可见（#555761 @x=%d）" % divider_col)
 
 func _count_region(img: Image, x0: int, x1: int, color: Color) -> int:
 	var count := 0

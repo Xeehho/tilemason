@@ -8,7 +8,7 @@ signal asset_selected(asset_id: String)
 signal rescan_requested ## 刷新素材库（放入文件后点按即扫，无须重启）
 
 const THUMB_BOX := 64 ## 缩略图最大边（px）：16px→4x=64、48px→1x=48，均为整数倍
-const PANEL_WIDTH := 380
+const PANEL_WIDTH := 320 ## 最小宽=紧凑档右 Dock（§4.2）；列数自适应 2-5 列兜底窄面板，标准档 400 由壳层给足
 
 ## 分类显示名（design.md §6.1）
 const CATEGORY_NAMES := {
@@ -18,7 +18,7 @@ const CATEGORY_NAMES := {
 
 var _library: AssetLibrary
 var _category_list: Tree # 三层菜单树（虚拟分类置顶+group 树+原分类）
-var _grid: GridContainer
+var _grid: HFlowContainer
 var _empty_hint: Label
 var _selected: TextureButton
 var _buttons := {} # asset_id -> TextureButton（当前分类网格内的按钮）
@@ -99,12 +99,11 @@ func _build_ui() -> void:
 	box.add_child(search)
 	_search_box = search
 
-	_grid = GridContainer.new()
-	_grid.columns = 4 # 初始值；列数由 _adaptive_columns() 按面板实际宽度计算（阶段 B）
+	_grid = HFlowContainer.new() # 流式布局：按可用宽自动换行（列数自适应且 min 只取单格宽——
+	# GridContainer 按列数计 min 会与「列数按面板宽计算」互相卡死，紧凑档收缩不下去，实测踩中）
 	_grid.add_theme_constant_override("h_separation", 6)
 	_grid.add_theme_constant_override("v_separation", 6)
 	box.add_child(_grid)
-	resized.connect(_on_panel_resized) # 面板宽度变化时重排列数
 
 	_empty_hint = Label.new()
 	_empty_hint.text = "此分类暂无素材"
@@ -263,19 +262,6 @@ func _on_category_selected(meta: String) -> void:
 		var btn := _make_thumb_button(asset as Dictionary)
 		_buttons[str((asset as Dictionary)["id"])] = btn
 		_grid.add_child(btn)
-
-## 列数自适应（阶段 B）：按缩略图区可用宽计算，64px 图+6 间距 → 面板窄则 2 列、宽则 5 列
-func _adaptive_columns() -> int:
-	var avail := size.x - 150 - 24 # 减分类树与边距（近似可用网格宽）
-	if avail < 140:
-		avail = size.x - 24 # 树折叠时
-	var n := int(avail / 70)
-	return clampi(n, 2, 5)
-
-func _on_panel_resized() -> void:
-	var want := _adaptive_columns()
-	if _grid.columns != want:
-		_grid.columns = want
 
 ## 搜索词变化：重刷当前选中节点内容
 func _on_search_changed() -> void:

@@ -71,7 +71,7 @@ func set_active(tool_id: String) -> void:
 			btn.add_theme_stylebox_override("pressed", sel)
 			btn.modulate = Color.WHITE
 		else:
-			btn.add_theme_stylebox_override("normal", null)
-			btn.add_theme_stylebox_override("hover", null)
-			btn.add_theme_stylebox_override("pressed", null)
+			btn.remove_theme_stylebox_override("normal") # 传 null 会在 4.6 打 rp_style 错误日志
+			btn.remove_theme_stylebox_override("hover")
+			btn.remove_theme_stylebox_override("pressed")
 			btn.modulate = Color(0.85, 0.87, 0.9)

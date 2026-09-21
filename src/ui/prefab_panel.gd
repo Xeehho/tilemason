@@ -27,11 +27,21 @@ func setup() -> void:
 	box.set_anchors_preset(Control.PRESET_FULL_RECT)
 	margin.add_child(box)
 	var title := Label.new()
-	title.text = "预制件"
+	title.text = "框选内容 Ctrl+P 存为预制件，P 键放置"
+	title.add_theme_font_size_override("font_size", 12)
+	title.modulate.a = 0.55
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	# autowrap 在 4.6 仍按全文本宽计 min——overrun 才真正限宽，否则页签 min 被撑过紧凑档 224
+	title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	box.add_child(title)
+	var scroll := ScrollContainer.new() # 页签全高后条目可超一屏，需滚动
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box.add_child(scroll)
 	_list_box = VBoxContainer.new()
 	_list_box.add_theme_constant_override("separation", 2)
-	box.add_child(_list_box)
+	_list_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(_list_box)
 
 ## 刷新列表（names 来自 Prefab.list_names；统计从各件快照读取）
 func refresh(current: String) -> void:
@@ -44,6 +54,8 @@ func refresh(current: String) -> void:
 		var hint := Label.new()
 		hint.text = "无预制件（框选内容后 Ctrl+P 保存）"
 		hint.modulate.a = 0.6
+		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		hint.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		_list_box.add_child(hint)
 		return
 	for name in names:

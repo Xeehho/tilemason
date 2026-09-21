@@ -1,7 +1,7 @@
 class_name Hotbar
 extends PanelContainer
-## 底部快捷栏 v2（用户反馈 #4）：橡皮常驻独立首格（与素材槽留间距）、
-## 素材槽纯图标（无数字无文字，tooltip 提示）、右键槽位自定义绑定（持久化）
+## 底部快捷栏 v3（UI 重构阶段 C §5.5）：橡皮常驻独立首格（角标 E）、
+## 素材槽 1-7 数字角标（不看 tooltip 即知键位，§7 验收）、右键槽位自定义绑定（持久化）
 ## 布局：[橡皮（常驻）] | 间距 | [槽1]..[槽7]
 
 signal slot_activated(index: int) ## 0=橡皮；1-7=素材槽
@@ -31,12 +31,14 @@ func setup(lib: AssetLibrary, bindings: Array) -> void:
 	row.set_anchors_preset(Control.PRESET_FULL_RECT)
 	margin.add_child(row)
 
-	# 橡皮：常驻独立首格（当前工具高亮由 set_active 驱动）
-	var eraser := _icon_button(ERASER_ICON)
-	eraser.tooltip_text = "橡皮擦（常驻，=E 键）"
-	eraser.pressed.connect(func() -> void: slot_activated.emit(0))
-	row.add_child(eraser)
-	_eraser_btn = eraser
+	# 橡皮：常驻独立首格（当前工具高亮由 set_eraser_active 驱动；角标 E）
+	var eraser_slot := _make_slot("E")
+	row.add_child(eraser_slot)
+	_eraser_btn = eraser_slot.get_meta("btn") as TextureButton
+	_eraser_btn.texture_normal = load(ERASER_ICON)
+	_eraser_btn.stretch_mode = TextureButton.STRETCH_KEEP_CENTERED
+	_eraser_btn.tooltip_text = "橡皮擦（常驻，=E 键）"
+	_eraser_btn.pressed.connect(func() -> void: slot_activated.emit(0))
 
 	# 间距（用户要求：橡皮与后面格子留距离）
 	var gap := Control.new()
@@ -45,9 +47,8 @@ func setup(lib: AssetLibrary, bindings: Array) -> void:
 
 	_slot_buttons.clear()
 	for i in 7:
-		var btn := TextureButton.new()
-		btn.custom_minimum_size = Vector2(SLOT_SIZE, SLOT_SIZE)
-		btn.tooltip_text = "右键：绑定当前选中素材\n左键：选用"
+		var slot := _make_slot(str(i + 1))
+		var btn := slot.get_meta("btn") as TextureButton
 		_refresh_slot_icon(btn, i)
 		var idx := i + 1
 		btn.pressed.connect(func() -> void: slot_activated.emit(idx))
@@ -56,18 +57,36 @@ func setup(lib: AssetLibrary, bindings: Array) -> void:
 					and (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_RIGHT:
 				slot_customized.emit(idx))
 		_slot_buttons.append(btn)
-		row.add_child(btn)
+		row.add_child(slot)
 
 var _eraser_btn: TextureButton
 
-func _icon_button(icon_path: String) -> TextureButton:
+## 单格：48×48 容器 + 铺满的按钮 + 右上角数字角标（§5.5 槽位显示 1..9 角标）
+func _make_slot(badge_text: String) -> Control:
+	var slot := Control.new()
+	slot.custom_minimum_size = Vector2(SLOT_SIZE, SLOT_SIZE)
 	var btn := TextureButton.new()
-	btn.custom_minimum_size = Vector2(SLOT_SIZE, SLOT_SIZE)
-	var tex: Texture2D = load(icon_path)
-	if tex != null:
-		btn.texture_normal = tex
-		btn.stretch_mode = TextureButton.STRETCH_KEEP_CENTERED
-	return btn
+	btn.set_anchors_preset(Control.PRESET_FULL_RECT)
+	slot.add_child(btn)
+	slot.set_meta("btn", btn)
+	var badge := Label.new()
+	badge.text = badge_text
+	badge.add_theme_font_size_override("font_size", 11)
+	badge.modulate = Color(1, 1, 1, 0.75)
+	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	badge.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	badge.offset_left = -14
+	badge.offset_top = 0
+	var bg := StyleBoxFlat.new()
+	bg.bg_color = Color(0, 0, 0, 0.45)
+	bg.set_corner_radius_all(4)
+	bg.content_margin_left = 3
+	bg.content_margin_right = 3
+	bg.content_margin_top = 0
+	bg.content_margin_bottom = 1
+	badge.add_theme_stylebox_override("normal", bg)
+	slot.add_child(badge)
+	return slot
 
 ## 刷新某槽图标（按绑定；空槽显示淡色空框占位）
 func _refresh_slot_icon(btn: TextureButton, i: int) -> void:
