@@ -1270,7 +1270,8 @@ func refresh_status() -> void:
 			var lock_hint := "（该层已锁定，放置会被拒绝）" if _document.is_layer_locked(layer_id) else ""
 			asset_text = "%s → 落在「%s」%s" % [asset["name"], layer_name, lock_hint]
 	var file_name := _current_map_path.get_file()
-	_status.set_line("工具：%s ｜ 素材：%s ｜ 文件：%s ｜ S 选择 · E 橡皮 · L 直线 · G 油漆桶 · Ctrl+框 矩形 · Ctrl+Z/Y 撤销重做 · R 批量替换 · Ctrl+P 存预制件 · Ctrl+S 保存 · F9 检查" % [tool, asset_text, file_name])
+	var pos_text := "(%d,%d)" % [mouse_cell().x, mouse_cell().y]
+	_status.set_line("坐标：%s ｜ 工具：%s ｜ 素材：%s ｜ 文件：%s ｜ S 选择 · E 橡皮 · L 直线 · G 油漆桶 · Ctrl+框 矩形 · Ctrl+Z/Y 撤销重做 · R 批量替换 · Ctrl+P 存预制件 · Ctrl+S 保存 · F9 检查" % [pos_text, tool, asset_text, file_name])
 
 ## 图层属性变化影响素材落层提示（锁定警示），载入新文档后重连
 func _connect_status_signals() -> void:
