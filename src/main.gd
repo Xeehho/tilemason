@@ -42,6 +42,7 @@ var _footprint_preview: RectPreview ## 占格范围框（多格物件预览时�
 var _footprint_demo_lock := false ## 截图取证：锁定固定范围框，跳过 _process 的鼠标跟随
 var _bucket_mode := false ## G 键油漆桶（design.md §2.2）：左键填充连通同素材区域
 var _current_prefab := "" ## 当前预制件名（Ctrl+P 保存并选定、P 放置）
+var _prefab_panel: PrefabPanel ## 预制件面板（列表/选用/删除）
 var _hotbar: Hotbar ## 底部快捷栏（design.md §6.2）
 var _recent: Array = [] ## 最近使用素材 id（新选中的排最前）
 var _favorites: Array = [] ## 收藏素材 id
@@ -808,7 +809,30 @@ func _save_prefab_from_selection() -> void:
 	var f := FileAccess.open("user://prefab_current.json", FileAccess.WRITE)
 	if f != null:
 		f.store_string(name)
+	_prefab_panel.refresh(_current_prefab)
 	print("[TileMason] 已存预制件「%s」：%d 方块 %d 物件（P 键放置到鼠标处）" % [name, (snapshot["tiles"] as Array).size(), (snapshot["objects"] as Array).size()])
+
+## 面板选用预制件为当前件
+func _choose_prefab(name: String) -> void:
+	_current_prefab = name
+	var f := FileAccess.open("user://prefab_current.json", FileAccess.WRITE)
+	if f != null:
+		f.store_string(name)
+	_prefab_panel.refresh(name)
+	print("[TileMason] 当前预制件：「%s」（P 放置）" % name)
+
+## 面板删除预制件
+func _delete_prefab(name: String) -> void:
+	var dir := DirAccess.open(Prefab.PREFAB_DIR)
+	if dir != null:
+		dir.remove(name + ".json")
+	if _current_prefab == name:
+		_current_prefab = ""
+		var f := FileAccess.open("user://prefab_current.json", FileAccess.WRITE)
+		if f != null:
+			f.store_string("")
+	_prefab_panel.refresh(_current_prefab)
+	print("[TileMason] 已删除预制件「%s」" % name)
 
 ## 放置当前预制件：整组落到鼠标格（左上角对齐），单命令可撤销（复用粘贴模式）
 func _place_current_prefab() -> void:
@@ -1233,8 +1257,25 @@ func _build_layer_panel() -> void:
 		_layer_panel.offset_left = 0
 		_layer_panel.offset_right = 190
 		_layer_panel.offset_top = 0
-		_layer_panel.offset_bottom = 0
+		_layer_panel.offset_bottom = -224 # 给下方预制件面板让位
 	_layer_panel.setup(_document)
+	var pf_layer := CanvasLayer.new()
+	pf_layer.layer = 10
+	add_child(pf_layer)
+	_prefab_panel = PrefabPanel.new()
+	_prefab_panel.setup()
+	_prefab_panel.prefab_chosen.connect(_choose_prefab)
+	_prefab_panel.prefab_deleted.connect(_delete_prefab)
+	pf_layer.add_child(_prefab_panel)
+	_prefab_panel.anchor_left = 0.0
+	_prefab_panel.anchor_right = 0.0
+	_prefab_panel.anchor_top = 1.0
+	_prefab_panel.anchor_bottom = 1.0
+	_prefab_panel.offset_left = 0
+	_prefab_panel.offset_right = 190
+	_prefab_panel.offset_top = -220
+	_prefab_panel.offset_bottom = -26 # 状态栏之上
+	_prefab_panel.refresh(_current_prefab)
 
 func _on_asset_selected(asset_id: String) -> void:
 	_selected_asset_id = asset_id
