@@ -41,6 +41,7 @@ var _rect_preview: RectPreview
 var _footprint_preview: RectPreview ## 占格范围框（多格物件预览时显示覆盖区域，design.md §4/§8）
 var _footprint_demo_lock := false ## 截图取证：锁定固定范围框，跳过 _process 的鼠标跟随
 var _bucket_mode := false ## G 键油漆桶（design.md §2.2）：左键填充连通同素材区域
+var _current_prefab := "" ## 当前预制件名（Ctrl+P 保存并选定、P 放置）
 var _hotbar: Hotbar ## 底部快捷栏（design.md §6.2）
 var _recent: Array = [] ## 最近使用素材 id（新选中的排最前）
 var _favorites: Array = [] ## 收藏素材 id
@@ -95,6 +96,10 @@ func _ready() -> void:
 	_build_hotbar()
 	_connect_status_signals()
 	_setup_autosave()
+	if FileAccess.file_exists("user://prefab_current.json"):
+		var pf := FileAccess.open("user://prefab_current.json", FileAccess.READ)
+		if pf != null:
+			_current_prefab = pf.get_as_text().strip_edges()
 	refresh_status()
 
 	_preview = Sprite2D.new()
@@ -238,6 +243,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_copy_selected()
 		elif key.ctrl_pressed and key.keycode == KEY_V:
 			_paste_clipboard()
+		elif key.ctrl_pressed and key.keycode == KEY_P:
+			_save_prefab_from_selection()
+		elif key.keycode == KEY_P and not key.ctrl_pressed:
+			_place_current_prefab()
 		elif key.ctrl_pressed and key.keycode == KEY_A:
 			_select_all()
 		elif key.keycode == KEY_DELETE:
@@ -765,6 +774,72 @@ func _select_all() -> void:
 			if not coords.is_empty():
 				cells[layer_id] = coords
 	_apply_selection(ids, cells)
+
+## 选中内容存为预制件（design.md §7）：相对化快照落盘并设为当前
+func _save_prefab_from_selection() -> void:
+	if _selection.is_empty():
+		print("[TileMason] 预制件：先在选择模式下框选内容（S）")
+		return
+	var snapshot := Prefab.build_snapshot(_document, _selection.object_ids(), _selection.cells_by_layer())
+	if snapshot.is_empty():
+		print("[TileMason] 预制件：选区没有可保存的内容")
+		return
+	var name := "预制件%d" % (Prefab.list_names().size() + 1)
+	var path := Prefab.save_prefab(name, snapshot)
+	if path.is_empty():
+		print("[TileMason] 预制件保存失败")
+		return
+	_current_prefab = name
+	var f := FileAccess.open("user://prefab_current.json", FileAccess.WRITE)
+	if f != null:
+		f.store_string(name)
+	print("[TileMason] 已存预制件「%s」：%d 方块 %d 物件（P 键放置到鼠标处）" % [name, (snapshot["tiles"] as Array).size(), (snapshot["objects"] as Array).size()])
+
+## 放置当前预制件：整组落到鼠标格（左上角对齐），单命令可撤销（复用粘贴模式）
+func _place_current_prefab() -> void:
+	if _current_prefab.is_empty():
+		print("[TileMason] 预制件：还没有保存过（选择内容后 Ctrl+P）")
+		return
+	var snap := Prefab.load_prefab(_current_prefab)
+	if snap.is_empty():
+		print("[TileMason] 预制件「%s」读取失败" % _current_prefab)
+		return
+	var base := mouse_cell()
+	var tile_entries := []
+	var obj_entries := []
+	for t in snap.get("tiles", []):
+		var te: Dictionary = t
+		var cell := base + Vector2i(int(te["cell"][0]), int(te["cell"][1]))
+		var old: Variant = _document.set_tile(str(te["layer"]), cell, str(te["asset_id"]))
+		if old != null:
+			tile_entries.append({"layer": str(te["layer"]), "cell": cell, "old": old, "asset_id": str(te["asset_id"])})
+	for o in snap.get("objects", []):
+		var oe: Dictionary = o
+		var props := oe.duplicate(true)
+		props["cell"] = base + Vector2i(int(oe["cell"][0]), int(oe["cell"][1]))
+		var new_id := _document.add_object(props)
+		if new_id > 0:
+			obj_entries.append(_document.get_object(new_id).duplicate(true))
+	if tile_entries.is_empty() and obj_entries.is_empty():
+		return
+	var do_place := func() -> void:
+		for te in tile_entries:
+			var t2: Dictionary = te
+			_document.set_tile(str(t2["layer"]), t2["cell"] as Vector2i, str(t2["asset_id"]), true)
+		for oe in obj_entries:
+			_document.insert_object(oe as Dictionary, true)
+	var undo_place := func() -> void:
+		for oe in obj_entries:
+			_document.remove_object(int((oe as Dictionary)["id"]), true)
+		for i in range(tile_entries.size() - 1, -1, -1):
+			var t2: Dictionary = tile_entries[i]
+			var prev: Dictionary = t2["old"]
+			if prev.is_empty():
+				_document.erase_tile(str(t2["layer"]), t2["cell"] as Vector2i, true)
+			else:
+				_document.set_tile(str(t2["layer"]), t2["cell"] as Vector2i, str(prev["asset_id"]), true)
+	_commands.push("放置预制件「%s」" % _current_prefab, do_place, undo_place)
+	print("[TileMason] 已放置预制件「%s」：%d 方块 %d 物件" % [_current_prefab, tile_entries.size(), obj_entries.size()])
 
 ## 批量替换素材（design.md §3/P3）：鼠标所指素材全图替换为当前选中素材
 ## 鼠标指到什么（吸管同款取法）就把全图同款换掉——tile 与物件分别处理，单命令可撤销
