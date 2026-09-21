@@ -122,7 +122,11 @@ func _rebuild_category_list() -> void:
 		_empty_hint.visible = true
 		return
 	for category in categories:
-		_category_list.add_item(str(CATEGORY_NAMES.get(str(category), str(category))))
+		var count := _library.get_assets_by_category(str(category)).size()
+		var label := str(CATEGORY_NAMES.get(str(category), str(category)))
+		if count > 0:
+			label += "（%d）" % count
+		_category_list.add_item(label)
 		_category_list.set_item_metadata(_category_list.item_count - 1, str(category))
 	for i in _category_list.item_count: # 恢复选中；原选中不存在则选第一项
 		if str(_category_list.get_item_metadata(i)) == selected_meta:
