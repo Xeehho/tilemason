@@ -58,7 +58,7 @@ func _init() -> void:
 	_check(issues.size() == 1, "对角相邻不算连通")
 
 	# 场景六b：孤立区域——环路围出一块内部空区
-	doc2e := MapDocument.new()
+	var doc2e := MapDocument.new()
 	for i in 5:
 		doc2e.set_tile("ground", Vector2i(i, 0), "x")
 		doc2e.set_tile("ground", Vector2i(i, 4), "x")
@@ -67,17 +67,17 @@ func _init() -> void:
 	var enclosed := MapChecker.check_enclosed_regions(doc2e, lib)
 	_check(enclosed.size() == 1 and enclosed[0]["count"] == 9, "环路内孤立区域 9 格（场景六前置）")
 	# 开放空区不报：单条直线旁的空地
-	doc2o := MapDocument.new()
+	var doc2o := MapDocument.new()
 	doc2o.set_tile("ground", Vector2i(0, 0), "x")
 	_check(MapChecker.check_enclosed_regions(doc2o, lib).is_empty(), "开放空区不报孤立")
 	# 碰撞重叠：两件 3×3 物件同格叠放
-	doc2c := MapDocument.new()
+	var doc2c := MapDocument.new()
 	doc2c.add_object({"asset_id": building, "layer": "building", "cell": Vector2i(0, 0)})
 	doc2c.add_object({"asset_id": building, "layer": "building", "cell": Vector2i(0, 0)})
 	var overlaps := MapChecker.check_collision_overlaps(doc2c, lib)
 	_check(overlaps.size() == 9 and overlaps[0]["type"] == "collision_overlap", "同格叠放 9 格重叠全报")
 	# 相邻不重叠：错开一格
-	doc2d := MapDocument.new()
+	var doc2d := MapDocument.new()
 	doc2d.add_object({"asset_id": building, "layer": "building", "cell": Vector2i(0, 0)})
 	doc2d.add_object({"asset_id": building, "layer": "building", "cell": Vector2i(3, 0)})
 	_check(MapChecker.check_collision_overlaps(doc2d, lib).is_empty(), "相邻摆放不重叠")
