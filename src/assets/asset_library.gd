@@ -120,6 +120,32 @@ func load_texture(asset_id: String) -> ImageTexture:
 	_textures[asset_id] = tex
 	return tex
 
+## UI 缩略图（64 盒，最近邻整数倍缩放）：小图整数倍放大（16px→4x）、大图整数分母缩小
+## （228px→÷4=57）——面板与快捷栏共用；原图 texture 会把按钮 min 撑到数百像素（用户实测穿模）
+const THUMB_BOX := 64
+var _thumb_cache := {}
+
+func load_thumb(asset_id: String) -> ImageTexture:
+	if _thumb_cache.has(asset_id):
+		return _thumb_cache[asset_id]
+	var img := load_image(asset_id)
+	if img == null:
+		return null
+	var longest := maxi(img.get_width(), img.get_height())
+	var thumb := img
+	if longest <= THUMB_BOX:
+		var scale := maxi(1, THUMB_BOX / longest)
+		if scale > 1:
+			thumb = img.duplicate()
+			thumb.resize(img.get_width() * scale, img.get_height() * scale, Image.INTERPOLATE_NEAREST)
+	else:
+		var denom := ceili(longest / float(THUMB_BOX))
+		thumb = img.duplicate()
+		thumb.resize(maxi(1, img.get_width() / denom), maxi(1, img.get_height() / denom), Image.INTERPOLATE_NEAREST)
+	var tex := ImageTexture.create_from_image(thumb)
+	_thumb_cache[asset_id] = tex
+	return tex
+
 ## 读取单个素材包：pack.json 缺失/损坏则跳过整包并告警；重复扫描同包不翻倍
 func _load_pack(pack_dir: String, pack_id: String) -> void:
 	for p in packs:

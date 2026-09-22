@@ -194,6 +194,23 @@ func _group_b_hotbar() -> void:
 	var placed_layer: String = "ground" if bound.contains("tiles/") else "building"
 	_check(_tiles(placed_layer) >= 1 or _objs() >= 1, "快捷栏素材→放置（ground=%d 物件=%d）" % [_tiles(), _objs()])
 	main._do_undo()
+	# B2b 大图绑定槽位不撑破布局（用户实测：快捷栏大图穿模——load_texture 原图把按钮 min 撑到 468px）
+	var big_id := ""
+	for a in main._library.get_assets():
+		if str((a as Dictionary)["id"]).begins_with("长安素材"):
+			big_id = str((a as Dictionary)["id"])
+			break
+	if not big_id.is_empty():
+		main._selected_asset_id = big_id
+		main._hotbar_customize(3)
+		await process_frame
+		var slot_btn = main._hotbar._slot_buttons[2]
+		var bmin: Vector2 = slot_btn.get_combined_minimum_size()
+		var btex: Texture2D = slot_btn.texture_normal
+		_check(bmin.x <= 48.0 and btex != null and maxi(btex.get_width(), btex.get_height()) <= 64,
+			"大图绑快捷栏槽位限盒（按钮min=%.0f 贴图≤64）" % bmin.x)
+		main._hotbar_bindings = _hotbar_backup.duplicate()
+		main._hotbar.set_bindings(main._hotbar_bindings)
 	# B3 空选右键=清空槽位
 	main._selected_asset_id = ""
 	main._hotbar_customize(2)

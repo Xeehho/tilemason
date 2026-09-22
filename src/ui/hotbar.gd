@@ -95,8 +95,9 @@ func _refresh_slot_icon(btn: TextureButton, i: int) -> void:
 		btn.texture_normal = null
 		btn.modulate = Color(1, 1, 1, 0.35)
 		return
-	var tex := _library.load_texture(asset_id)
+	var tex := _library.load_thumb(asset_id) # 缩略图而非原图：大建筑原图把按钮 min 撑到数百像素（用户实测穿模）
 	btn.texture_normal = tex
+	btn.ignore_texture_size = true # min 与 texture 解耦，槽位恒 48 盒
 	btn.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
 	btn.modulate = Color.WHITE
 	var asset := _library.get_asset(asset_id)

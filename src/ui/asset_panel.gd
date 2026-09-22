@@ -297,27 +297,6 @@ func _on_thumb_pressed(btn: TextureButton, asset_id: String) -> void:
 	btn.modulate = Color(1.0, 0.9, 0.5) # 选中高亮
 	asset_selected.emit(asset_id)
 
-## 整数倍缩放缩略图（最近邻）：16px→4x、48px→1x，不产生非整数拉伸
+## 面板缩略图：库级 64 盒缩放缓存（整数倍缩放，面板/快捷栏共用）
 func _get_thumb(asset_id: String) -> ImageTexture:
-	if _thumbs.has(asset_id):
-		return _thumbs[asset_id]
-	var img := _library.load_image(asset_id)
-	if img == null:
-		return ImageTexture.new()
-	var longest := maxi(img.get_width(), img.get_height())
-	var thumb := img
-	if longest <= THUMB_BOX:
-		# 小图整数倍放大（16px→4x、48px→1x，最近邻）
-		var scale := maxi(1, THUMB_BOX / longest)
-		if scale > 1:
-			thumb = img.duplicate()
-			thumb.resize(img.get_width() * scale, img.get_height() * scale, Image.INTERPOLATE_NEAREST)
-	else:
-		# 大图整数分母缩小到 ≤64 盒（228px→/4=57）——原尺寸 texture 会把按钮 min 撑到
-		# 数百像素宽，HFlowContainer 单项溢出面板压到分类树（用户实测「切换分类时穿模」）
-		var denom := ceili(longest / float(THUMB_BOX))
-		thumb = img.duplicate()
-		thumb.resize(maxi(1, img.get_width() / denom), maxi(1, img.get_height() / denom), Image.INTERPOLATE_NEAREST)
-	var tex := ImageTexture.create_from_image(thumb)
-	_thumbs[asset_id] = tex
-	return tex
+	return _library.load_thumb(asset_id)
