@@ -57,6 +57,13 @@ func setup(doc: MapDocument) -> void:
 var _count_dirty := false ## 计数刷新去抖：批量落格（矩形 2500 格）逐格 tile_changed 会
 ## 触发同次数全行计数重算（每行遍历文档），帧末合并为一次
 
+## 手动拖拽排序（引擎 drag-drop 检测多轮实测不可达——force_drag/Button 模态/parse 模拟
+## 均失败；按下-位移-释放全自管，探针可逐段验证）
+var _drag_pending: LayerEntry = null
+var _drag_active := false
+var _drag_press_pos := Vector2.ZERO
+var _drag_highlight: LayerEntry = null
+
 func _on_content_changed(_a = null, _b = null) -> void:
 	_count_dirty = true
 
@@ -65,6 +72,55 @@ func _process(_delta: float) -> void:
 		_count_dirty = false
 		for id in _rows.keys():
 			(_rows[id] as LayerEntry).refresh_count()
+	_process_drag()
+
+func _process_drag() -> void:
+	if _drag_pending != null and is_instance_valid(_drag_pending):
+		if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+			if not _drag_active:
+				_drag_pending = null # 未移动即释放=普通点击，不排序
+				return
+			_finish_drag()
+			return
+		if not _drag_active and _drag_press_pos.distance_to(get_global_mouse_position()) > 8.0:
+			_drag_active = true
+		if _drag_active:
+			_set_drag_highlight(_entry_under_mouse())
+	elif _drag_active:
+		_finish_drag()
+
+## 按下拖柄/名称：开始跟踪（是否成拖拽由后续位移决定）
+func _begin_drag_track(entry: LayerEntry) -> void:
+	_drag_pending = entry
+	_drag_press_pos = get_global_mouse_position()
+	_drag_active = false
+
+func _entry_under_mouse() -> LayerEntry:
+	var mp := get_global_mouse_position()
+	for id in _rows.keys():
+		var e = _rows[id]
+		if e != null and is_instance_valid(e) and e.get_global_rect().has_point(mp):
+			return e
+	return null
+
+func _set_drag_highlight(entry: LayerEntry) -> void:
+	if entry == _drag_highlight:
+		return
+	if _drag_highlight != null and is_instance_valid(_drag_highlight):
+		_drag_highlight.modulate = Color.WHITE
+	_drag_highlight = entry
+	if entry != null:
+		entry.modulate = Color(1.3, 1.15, 0.75) # 目标行高亮（释放即落位到该行）
+
+func _finish_drag() -> void:
+	var target := _entry_under_mouse()
+	var src := _drag_pending
+	_drag_active = false
+	_drag_pending = null
+	_set_drag_highlight(null)
+	if src != null and is_instance_valid(src) and target != null and target != src:
+		_document.move_layer(str(src._layer["id"]), target._panel_index_to_layer_index())
+		print("[TileMason] 图层已排序（%s → 目标行位置）" % str(src._layer["id"]))
 
 func _on_layer_changed(layer_id: String, key: String) -> void:
 	# 只重建名字（行结构）；visible/locked/opacity 由行内控件自更新——
@@ -339,34 +395,17 @@ class LayerEntry extends PanelContainer:
 		var total := _panel._document.layer_count()
 		return clampi(total - 1 - idx, 0, total - 1)
 
-	## 条目本身也是放置目标：拖到某条=移到该层序（上=更高层级）
-	func _can_drop_data(_pos: Vector2, data: Variant) -> bool:
-		return data is Dictionary and (data as Dictionary).has("layer_id")
-
-	func _drop_data(_pos: Vector2, data: Variant) -> void:
-		var d := data as Dictionary
-		var target := _panel_index_to_layer_index()
-		_panel._document.move_layer(str(d["layer_id"]), target)
-		print("[TileMason] 图层已排序（%s → 序 %d，上=高）" % [str(d["layer_id"]), target])
-
-	## 拖拽数据（GripLabel._get_drag_data 用——引擎标准托管路径）
-	func _make_drag_data() -> Dictionary:
-		return {"layer_id": str(_layer["id"]), "from_index": _panel_index_to_layer_index()}
-
-## 拖柄：标准 _get_drag_data 路径（按住移动超阈值由引擎调起拖拽，全托管）——
-## 曾用 gui_input+force_drag：非标准调用点致拖拽流程不可靠（用户两轮实测失灵），弃用
+## 拖柄（按下即开始拖拽跟踪；引擎 drag-drop 检测三轮实测不可达，改 LayerPanel 手动托管）
 class GripLabel extends Label:
 	var entry: Variant # 所属 LayerEntry
-	func _get_drag_data(_pos: Vector2) -> Variant:
-		var e := entry as LayerEntry
-		set_drag_preview(e._make_preview())
-		return e._make_drag_data()
+	func _gui_input(event: InputEvent) -> void:
+		if event is InputEventMouseButton and (event as InputEventMouseButton).pressed 				and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+			(entry as LayerEntry)._panel._begin_drag_track(entry)
 
-## 名称按钮：整名区域可拖排序（引擎在按住移动超阈值时询问 _get_drag_data；
-## 未移动的按放仍是正常单击/双击——GripLabel 同款机制，Button 与标准拖拽兼容）
+## 名称按钮：名称区域同样可拖（按住移动=排序；未移动按放=单击/双击语义不变）
 class NameButton extends Button:
 	var entry: Variant # 所属 LayerEntry
-	func _get_drag_data(_pos: Vector2) -> Variant:
-		var e := entry as LayerEntry
-		set_drag_preview(e._make_preview())
-		return e._make_drag_data()
+	func _init() -> void:
+		button_down.connect(_on_down)
+	func _on_down() -> void:
+		(entry as LayerEntry)._panel._begin_drag_track(entry)
