@@ -210,6 +210,8 @@ func _input(event: InputEvent) -> void:
 		if focus is LineEdit or focus is TextEdit:
 			return # 搜索框/重命名框中不抢 Tab
 		_panel.visible = not _panel.visible # design.md §6.3 Tab 显隐素材库
+		if _shell != null:
+			_shell.set_right_content_visible(_panel.visible)
 		print("[TileMason] 素材面板：%s" % ("显示" if _panel.visible else "隐藏（Tab 再显）"))
 		get_viewport().set_input_as_handled()
 
@@ -569,10 +571,12 @@ func _exit_select_mode() -> void:
 	_select_mode = false
 	_marqueeing = false
 	_moving = false
-	_rect_preview.clear_rect()
-	_view.set_objects_tinted(_selection.object_ids(), false)
-	_view.resync_objects(_selection.object_ids()) # 丢弃未提交的拖动位移
-	_view.resync_cells(_selection.cells_by_layer())
+	if _rect_preview != null:
+		_rect_preview.clear_rect()
+	if _view != null:
+		_view.set_objects_tinted(_selection.object_ids(), false)
+		_view.resync_objects(_selection.object_ids()) # 丢弃未提交的拖动位移
+		_view.resync_cells(_selection.cells_by_layer())
 	_selection.clear()
 	print("[TileMason] 选择模式关闭")
 	refresh_status()

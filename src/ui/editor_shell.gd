@@ -78,6 +78,7 @@ func setup() -> void:
 
 var _left_collapsed := false
 var _right_collapsed := false
+var _right_content_visible := true ## Tab 隐藏素材内容时同步释放 Dock 空间，保留折叠手柄
 var _left_handle: Button
 var _right_handle: Button
 
@@ -90,6 +91,20 @@ func _make_dock_handle(side: String) -> Button:
 	b.add_theme_font_size_override("font_size", 14)
 	b.tooltip_text = ("收起/展开左侧栏（[ 键）" if side == "left" else "收起/展开右侧栏（] 键）")
 	b.text = "⟨" if side == "left" else "⟩"
+	# 手柄同时承担 Dock 的视觉分隔线；Button.flat 不绘制背景，单独补 1px
+	# ColorRect，避免 1600/1280 两档下左右区域粘成一整块。
+	var divider := ColorRect.new()
+	divider.color = AppTheme.DIVIDER
+	divider.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	divider.anchor_left = 0.0
+	divider.anchor_top = 0.0
+	divider.anchor_right = 0.0
+	divider.anchor_bottom = 1.0
+	divider.offset_left = 0.0
+	divider.offset_top = 0.0
+	divider.offset_right = 1.0
+	divider.offset_bottom = 0.0
+	b.add_child(divider)
 	b.pressed.connect(func() -> void:
 		toggle_dock(side))
 	_body_ref.add_child(b) # setup 中在 body 建好后调用
@@ -106,8 +121,17 @@ func toggle_dock(side: String) -> void:
 			_left_handle.text = "⟩" if _left_collapsed else "⟨"
 		left_dock_resized.emit(0.0 if _left_collapsed else left_dock.custom_minimum_size.x)
 	else:
+		# Tab 隐藏内容后点击手柄应直接恢复素材栏，而不是进入“空 Dock 折叠”状态。
+		if not _right_content_visible:
+			_right_content_visible = true
+			_right_collapsed = false
+			right_dock.visible = true
+			if _right_handle != null:
+				_right_handle.text = "⟩"
+			print("[TileMason] right侧栏：已恢复（手柄点击）")
+			return
 		_right_collapsed = not _right_collapsed
-		right_dock.visible = not _right_collapsed
+		right_dock.visible = not _right_collapsed and _right_content_visible
 		if _right_handle != null:
 			_right_handle.text = "⟨" if _right_collapsed else "⟩"
 		left_dock_resized.emit(0.0 if _right_collapsed else right_dock.custom_minimum_size.x)
@@ -118,6 +142,13 @@ func left_dock_collapsed() -> bool:
 
 func right_dock_collapsed() -> bool:
 	return _right_collapsed
+
+## Tab 显隐素材面板时释放/恢复右 Dock；手动折叠状态独立保留。
+func set_right_content_visible(visible: bool) -> void:
+	_right_content_visible = visible
+	if right_dock == null or _right_collapsed:
+		return
+	right_dock.visible = visible
 
 ## 紧凑模式（1280×720 档）动态跟踪视口宽：headless 启动早期视口仅 64px、
 ## 窗口运行中用户也会拖拽尺寸——size_changed 驱动而非 _ready 一次判定

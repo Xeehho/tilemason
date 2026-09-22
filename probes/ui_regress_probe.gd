@@ -10,11 +10,14 @@ var _fail := 0
 
 func _init() -> void:
 	print("[TileMason] UI 回归探针开始")
+	call_deferred("_run")
+
+func _run() -> void:
 	var main = load("res://scenes/main.tscn").instantiate()
-	root.size = Vector2i(1600, 900) # headless 默认视口 64px——布局断言须先给定窗口尺寸
 	root.add_child(main)
 	for i in 8:
 		await process_frame
+	root.size = Vector2i(1600, 900) # headless 默认视口 64px——布局断言须先给定窗口尺寸
 
 	# 1) 悬空活动层：点名空层→删除→擦除路径不崩、路由回退
 	var target := ""
@@ -39,8 +42,11 @@ func _init() -> void:
 
 	# 2) Tab 隐藏面板后原区域还给画布
 	main._panel.visible = false
+	main._shell.set_right_content_visible(false)
 	_check(not main._mouse_over_panel(), "隐藏面板后原区域不再被判定为面板区")
 	main._panel.visible = true
+	main._shell.set_right_content_visible(true)
+	_check(main._shell.right_dock.visible, "Tab 恢复时右 Dock 同步显示")
 
 	# 3) 切分类重建缩略图 → 跨帧点击（旧代码悬空 _selected 崩溃）
 	main._panel.select_asset("demo/tiles/road_h.png")
@@ -54,11 +60,20 @@ func _init() -> void:
 		_check(true, "跨帧后点击缩略图不踩已释放引用")
 
 	# 4) 图层计数随物件变化刷新（object_added/removed/changed 三信号）
+	# 隔离用户目录没有真实存档物件，探针自己建立确定性夹具，避免索引空数组导致假挂。
+	if main._document.get_objects().is_empty():
+		main._document.add_object({
+			"asset_id": "demo/props/house.png",
+			"layer": "building",
+			"cell": Vector2i(0, 0),
+		})
+		await process_frame
+	_check(not main._document.get_objects().is_empty(), "建立物件计数刷新夹具")
 	var n0: String = _tile_label_count(main, "building")
 	main._document.remove_object(int((main._document.get_objects()[0] as Dictionary)["id"]))
 	await process_frame
 	var n1: String = _tile_label_count(main, "building")
-	_check(n1 != n0 or _tile_label_total(main) > 0, "物件删除后图层计数刷新（%d→%d）" % [n0, n1])
+	_check(n1 != n0 or _tile_label_total(main) > 0, "物件删除后图层计数刷新（%s→%s）" % [n0, n1])
 
 	# 5) 按钮聚焦时 Tab 仍显隐面板
 	var any_btn = null
@@ -74,6 +89,9 @@ func _init() -> void:
 		Input.parse_input_event(ev)
 		await process_frame
 		_check(not main._panel.visible, "按钮聚焦时 Tab 仍隐藏面板（_input 层拦截）")
+		Input.parse_input_event(ev)
+		await process_frame
+		_check(main._panel.visible and main._shell.right_dock.visible, "再次按 Tab 恢复素材栏与 Dock")
 	# 6) 滚轮悬停面板不缩放：headless 无法模拟真实鼠标位（hovered_control 依赖），
 	#    由窗口模式取证覆盖（实测：面板区 2.0→2.0、画布区 1.0→2.0）——此处验证门控函数存在
 	var cam = root.get_camera_2d()
