@@ -164,7 +164,7 @@ class LayerEntry extends PanelContainer:
 		var row1 := HBoxContainer.new()
 		row1.add_theme_constant_override("separation", 4)
 		box.add_child(row1)
-		var grip := Label.new()
+		var grip := GripLabel.new()
 		grip.text = "⠿"
 		grip.modulate.a = 0.55
 		grip.custom_minimum_size = Vector2(24, 32) # 命中区 24×32（曾 10×19 点不中）
@@ -172,10 +172,7 @@ class LayerEntry extends PanelContainer:
 		grip.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		grip.mouse_filter = Control.MOUSE_FILTER_STOP
 		grip.tooltip_text = "按住拖动排序（上=更高层级）"
-		# gui_input 直发 force_drag：Button 的按模态会捕获鼠标吞掉拖拽发起（实测踩坑，勿改回 Button）
-		grip.gui_input.connect(func(event: InputEvent) -> void:
-			if event is InputEventMouseButton and (event as InputEventMouseButton).pressed 					and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
-				force_drag({"layer_id": str(_layer["id"]), "from_index": _panel_index_to_layer_index()}, _make_preview()))
+		grip.entry = self
 		row1.add_child(grip)
 		_name_btn = Button.new()
 		var shown_name := str(layer.get("name", layer.get("id", "")))
@@ -351,5 +348,15 @@ class LayerEntry extends PanelContainer:
 		_panel._document.move_layer(str(d["layer_id"]), target)
 		print("[TileMason] 图层已排序（%s → 序 %d，上=高）" % [str(d["layer_id"]), target])
 
+	## 拖拽数据（GripLabel._get_drag_data 用——引擎标准托管路径）
+	func _make_drag_data() -> Dictionary:
+		return {"layer_id": str(_layer["id"]), "from_index": _panel_index_to_layer_index()}
+
+## 拖柄：标准 _get_drag_data 路径（按住移动超阈值由引擎调起拖拽，全托管）——
+## 曾用 gui_input+force_drag：非标准调用点致拖拽流程不可靠（用户两轮实测失灵），弃用
+class GripLabel extends Label:
+	var entry: Variant # 所属 LayerEntry
 	func _get_drag_data(_pos: Vector2) -> Variant:
-		return null # 拖拽由拖柄 force_drag 发起
+		var e := entry as LayerEntry
+		set_drag_preview(e._make_preview())
+		return e._make_drag_data()

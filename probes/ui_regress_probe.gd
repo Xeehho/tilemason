@@ -93,12 +93,26 @@ func _init() -> void:
 	_check(lc and rc and main._shell.left_dock.visible and main._shell.right_dock.visible
 		and not main._shell.left_dock_collapsed() and not main._shell.right_dock_collapsed(),
 		"左右 Dock 折叠状态与往返复原")
-	# 8) 图层拖柄命中区（曾 10×19 基本点不中）
+	# 8) 图层拖柄命中区 + 标准拖拽数据链（GripLabel._get_drag_data → can_drop → drop 层序）
 	var entry = main._layer_panel._rows.get("ground")
 	if entry != null:
 		var grip = entry.get_child(0).get_child(0).get_child(0)
 		var gm: Vector2 = grip.get_combined_minimum_size()
 		_check(gm.x >= 24.0 and gm.y >= 32.0, "拖柄命中区≥24×32（%.0f×%.0f）" % [gm.x, gm.y])
+		var ddata: Variant = grip._get_drag_data(Vector2.ZERO)
+		var ok_d: bool = ddata is Dictionary and str((ddata as Dictionary)["layer_id"]) == "ground"
+		var ids_l: Array = []
+		for l3 in main._document.get_layers():
+			ids_l.append(str((l3 as Dictionary)["id"]))
+		var src_entry = main._layer_panel._rows[ids_l[ids_l.size() - 1]]
+		var tgt_entry2 = main._layer_panel._rows[ids_l[ids_l.size() - 3]]
+		var d2: Variant = (src_entry.get_child(0).get_child(0).get_child(0) as Object)._get_drag_data(Vector2.ZERO)
+		var ok_can2: bool = tgt_entry2._can_drop_data(Vector2.ZERO, d2)
+		tgt_entry2._drop_data(Vector2.ZERO, d2)
+		var after_l: Array = []
+		for l4 in main._document.get_layers():
+			after_l.append(str((l4 as Dictionary)["id"]))
+		_check(ok_d and ok_can2 and after_l != ids_l, "拖拽标准路径数据链（get_data/can_drop/层序移动）")
 	_finish()
 
 func _tile_label_count(main, layer_id: String) -> String:
