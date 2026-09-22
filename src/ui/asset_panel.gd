@@ -273,6 +273,10 @@ func _make_thumb_button(asset: Dictionary) -> TextureButton:
 	var asset_id := str(asset["id"])
 	var btn := TextureButton.new()
 	btn.texture_normal = _get_thumb(asset_id)
+	# 按钮盒与 texture 解耦：min 不随 texture 撑大（大图溢出面板的第二道保险）
+	btn.ignore_texture_size = true
+	btn.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
+	btn.custom_minimum_size = Vector2(THUMB_BOX, THUMB_BOX)
 	# 锚点角标（design.md §6.1 缩略图显示锚点类型）：底边中心=▽、左上角=△
 	var anchor := str(asset.get("anchor", "bottom_center"))
 	btn.tooltip_text = "%s\n占格 %d×%d\n锚点 %s" % [str(asset["name"]), (asset["cells"] as Vector2i).x, (asset["cells"] as Vector2i).y, "底边中心" if anchor == "bottom_center" else "左上角"]
@@ -300,11 +304,20 @@ func _get_thumb(asset_id: String) -> ImageTexture:
 	var img := _library.load_image(asset_id)
 	if img == null:
 		return ImageTexture.new()
-	var scale := maxi(1, THUMB_BOX / maxi(img.get_width(), img.get_height()))
+	var longest := maxi(img.get_width(), img.get_height())
 	var thumb := img
-	if scale > 1:
+	if longest <= THUMB_BOX:
+		# 小图整数倍放大（16px→4x、48px→1x，最近邻）
+		var scale := maxi(1, THUMB_BOX / longest)
+		if scale > 1:
+			thumb = img.duplicate()
+			thumb.resize(img.get_width() * scale, img.get_height() * scale, Image.INTERPOLATE_NEAREST)
+	else:
+		# 大图整数分母缩小到 ≤64 盒（228px→/4=57）——原尺寸 texture 会把按钮 min 撑到
+		# 数百像素宽，HFlowContainer 单项溢出面板压到分类树（用户实测「切换分类时穿模」）
+		var denom := ceili(longest / float(THUMB_BOX))
 		thumb = img.duplicate()
-		thumb.resize(img.get_width() * scale, img.get_height() * scale, Image.INTERPOLATE_NEAREST)
+		thumb.resize(maxi(1, img.get_width() / denom), maxi(1, img.get_height() / denom), Image.INTERPOLATE_NEAREST)
 	var tex := ImageTexture.create_from_image(thumb)
 	_thumbs[asset_id] = tex
 	return tex

@@ -145,7 +145,27 @@ func _group_a_panel_to_tools() -> void:
 	_check(not main._mouse_over_panel(), "隐藏后原区域还给画布")
 	main._panel.visible = true
 	main._do_undo()
-	# A6 刷新按钮不破坏选中（rescan 链路）
+	# A6 大图缩略图限盒（用户实测：长安大建筑图原尺寸溢出面板压分类树「穿模」）
+	var big_id := ""
+	for a in main._library.get_assets():
+		if str((a as Dictionary)["id"]).begins_with("长安素材"):
+			big_id = str((a as Dictionary)["id"])
+			break
+	if not big_id.is_empty():
+		main._panel._on_category_selected("__group:" + str(main._library.get_asset(big_id).get("group", "")))
+		await process_frame
+		await process_frame
+		var over_box := 0
+		var max_w2 := 0.0
+		for k in main._panel._buttons.keys():
+			var ms2: Vector2 = (main._panel._buttons[k] as Control).get_combined_minimum_size()
+			max_w2 = maxf(max_w2, ms2.x)
+			if ms2.x > 70 or ms2.y > 70:
+				over_box += 1
+		var big_tex: Texture2D = main._panel._get_thumb(big_id)
+		_check(over_box == 0 and max_w2 <= 64.0 and maxi(big_tex.get_width(), big_tex.get_height()) <= 64,
+			"长安大图缩略图限盒（超限=%d 最大宽=%.0f 贴图≤64）" % [over_box, max_w2])
+	# A7 刷新按钮不破坏选中（rescan 链路）
 	await _select("tiles/grass.png")
 	main._panel.rescan_requested.emit()
 	await process_frame
