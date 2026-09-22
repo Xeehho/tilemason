@@ -174,7 +174,8 @@ class LayerEntry extends PanelContainer:
 		grip.tooltip_text = "按住拖动排序（上=更高层级）"
 		grip.entry = self
 		row1.add_child(grip)
-		_name_btn = Button.new()
+		_name_btn = NameButton.new()
+		_name_btn.entry = self # 名称区域也可拖排序（按住移动；单击/双击语义不变）
 		var shown_name := str(layer.get("name", layer.get("id", "")))
 		_name_btn.text = ("▸ " if is_active else "") + shown_name
 		_name_btn.flat = true
@@ -355,6 +356,15 @@ class LayerEntry extends PanelContainer:
 ## 拖柄：标准 _get_drag_data 路径（按住移动超阈值由引擎调起拖拽，全托管）——
 ## 曾用 gui_input+force_drag：非标准调用点致拖拽流程不可靠（用户两轮实测失灵），弃用
 class GripLabel extends Label:
+	var entry: Variant # 所属 LayerEntry
+	func _get_drag_data(_pos: Vector2) -> Variant:
+		var e := entry as LayerEntry
+		set_drag_preview(e._make_preview())
+		return e._make_drag_data()
+
+## 名称按钮：整名区域可拖排序（引擎在按住移动超阈值时询问 _get_drag_data；
+## 未移动的按放仍是正常单击/双击——GripLabel 同款机制，Button 与标准拖拽兼容）
+class NameButton extends Button:
 	var entry: Variant # 所属 LayerEntry
 	func _get_drag_data(_pos: Vector2) -> Variant:
 		var e := entry as LayerEntry
