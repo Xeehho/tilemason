@@ -164,14 +164,18 @@ class LayerEntry extends PanelContainer:
 		var row1 := HBoxContainer.new()
 		row1.add_theme_constant_override("separation", 4)
 		box.add_child(row1)
-		var grip := Button.new()
-		grip.flat = true
+		var grip := Label.new()
 		grip.text = "⠿"
-		grip.modulate = Color(1, 1, 1, 0.55)
-		grip.custom_minimum_size = Vector2(24, 32) # 拖柄命中区：曾 10×19 基本点不中（用户实测「拖拽不好使」）
+		grip.modulate.a = 0.55
+		grip.custom_minimum_size = Vector2(24, 32) # 命中区 24×32（曾 10×19 点不中）
+		grip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		grip.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		grip.mouse_filter = Control.MOUSE_FILTER_STOP
 		grip.tooltip_text = "按住拖动排序（上=更高层级）"
-		grip.button_down.connect(func() -> void:
-			force_drag({"layer_id": str(_layer["id"]), "from_index": _panel_index_to_layer_index()}, _make_preview()))
+		# gui_input 直发 force_drag：Button 的按模态会捕获鼠标吞掉拖拽发起（实测踩坑，勿改回 Button）
+		grip.gui_input.connect(func(event: InputEvent) -> void:
+			if event is InputEventMouseButton and (event as InputEventMouseButton).pressed 					and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+				force_drag({"layer_id": str(_layer["id"]), "from_index": _panel_index_to_layer_index()}, _make_preview()))
 		row1.add_child(grip)
 		_name_btn = Button.new()
 		var shown_name := str(layer.get("name", layer.get("id", "")))
@@ -293,12 +297,9 @@ class LayerEntry extends PanelContainer:
 			_last_press_ms = 0
 		else:
 			_last_press_ms = now
-			# 单击 → 活动层（延迟到双击窗口结束再生效，避免双击也切层）
-			var id := str(_layer["id"])
-			get_tree().create_timer(0.3).timeout.connect(func() -> void:
-				if not _renaming and _last_press_ms != 0:
-					_panel.layer_activity_requested.emit(id)
-					_last_press_ms = 0)
+			# 单击 → 立即设活动层（幂等：双击重命名的首击切到本层属合理行为；
+			# 旧版等 0.3s 双击窗口再生效，用户实测「点击反应慢」，取消延迟）
+			_panel.layer_activity_requested.emit(str(_layer["id"]))
 
 	## 重命名：整行编辑框（§5.2：不与按钮争抢宽度——行1 名称位替换为 LineEdit 铺满）
 	func _start_rename() -> void:
