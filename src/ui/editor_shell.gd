@@ -46,18 +46,19 @@ func setup() -> void:
 	body.add_theme_constant_override("separation", 0)
 	body.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root_v.add_child(body)
+	_body_ref = body
 
 	left_dock = TabContainer.new() # 左 Dock：图层|预制件|检查（全高页签，无固定高硬切）
 	left_dock.custom_minimum_size = Vector2(LEFT_W, 0)
 	left_dock.mouse_filter = Control.MOUSE_FILTER_STOP
 	body.add_child(left_dock)
-	body.add_child(_vdivider(body))
+	_left_handle = _make_dock_handle("left")
 
 	canvas_host = Control.new() # 画布逻辑占位（实际渲染在 Node2D 层；此控件只预留空间）
 	canvas_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	canvas_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	body.add_child(canvas_host)
-	body.add_child(_vdivider(body))
+	_right_handle = _make_dock_handle("right")
 
 	right_dock = PanelContainer.new()
 	right_dock.custom_minimum_size = Vector2(RIGHT_W, 0)
@@ -74,6 +75,49 @@ func setup() -> void:
 	status_host = MarginContainer.new()
 	status_host.custom_minimum_size = Vector2(0, STATUS_H)
 	root_v.add_child(status_host)
+
+var _left_collapsed := false
+var _right_collapsed := false
+var _left_handle: Button
+var _right_handle: Button
+
+## 左右 Dock 折叠手柄（兼作分隔线）：点击整条收起/展开 Dock，画布自动吃满腾出空间
+func _make_dock_handle(side: String) -> Button:
+	var b := Button.new()
+	b.custom_minimum_size = Vector2(14, 0)
+	b.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	b.flat = true
+	b.add_theme_font_size_override("font_size", 14)
+	b.tooltip_text = ("收起/展开左侧栏（[ 键）" if side == "left" else "收起/展开右侧栏（] 键）")
+	b.text = "⟨" if side == "left" else "⟩"
+	b.pressed.connect(func() -> void:
+		toggle_dock(side))
+	_body_ref.add_child(b) # setup 中在 body 建好后调用
+	return b
+
+var _body_ref: Control
+
+## 折叠/展开（side="left"/"right"）；信号宽度变化供相机取景联动
+func toggle_dock(side: String) -> void:
+	if side == "left":
+		_left_collapsed = not _left_collapsed
+		left_dock.visible = not _left_collapsed
+		if _left_handle != null:
+			_left_handle.text = "⟩" if _left_collapsed else "⟨"
+		left_dock_resized.emit(0.0 if _left_collapsed else left_dock.custom_minimum_size.x)
+	else:
+		_right_collapsed = not _right_collapsed
+		right_dock.visible = not _right_collapsed
+		if _right_handle != null:
+			_right_handle.text = "⟨" if _right_collapsed else "⟩"
+		left_dock_resized.emit(0.0 if _right_collapsed else right_dock.custom_minimum_size.x)
+	print("[TileMason] %s侧栏：%s" % [side, "已收起（再点手柄或快捷键展开）" if (side == "left" and _left_collapsed) or (side == "right" and _right_collapsed) else "已展开"])
+
+func left_dock_collapsed() -> bool:
+	return _left_collapsed
+
+func right_dock_collapsed() -> bool:
+	return _right_collapsed
 
 ## 紧凑模式（1280×720 档）动态跟踪视口宽：headless 启动早期视口仅 64px、
 ## 窗口运行中用户也会拖拽尺寸——size_changed 驱动而非 _ready 一次判定
@@ -147,15 +191,6 @@ func _hdivider(_parent: Control) -> ColorRect:
 	line.color = AppTheme.DIVIDER
 	line.custom_minimum_size = Vector2(0, 1)
 	line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return line
-
-## 纵向分隔线（左 Dock/右 Dock 与画布之间）
-func _vdivider(_parent: Control) -> ColorRect:
-	var line := ColorRect.new()
-	line.color = AppTheme.DIVIDER
-	line.custom_minimum_size = Vector2(1, 0)
-	line.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return line
 

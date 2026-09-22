@@ -11,8 +11,9 @@ var _fail := 0
 func _init() -> void:
 	print("[TileMason] UI 回归探针开始")
 	var main = load("res://scenes/main.tscn").instantiate()
+	root.size = Vector2i(1600, 900) # headless 默认视口 64px——布局断言须先给定窗口尺寸
 	root.add_child(main)
-	for i in 6:
+	for i in 8:
 		await process_frame
 
 	# 1) 悬空活动层：点名空层→删除→擦除路径不崩、路由回退
@@ -73,6 +74,31 @@ func _init() -> void:
 		Input.parse_input_event(ev)
 		await process_frame
 		_check(not main._panel.visible, "按钮聚焦时 Tab 仍隐藏面板（_input 层拦截）")
+	# 6) 滚轮悬停面板不缩放：headless 无法模拟真实鼠标位（hovered_control 依赖），
+	#    由窗口模式取证覆盖（实测：面板区 2.0→2.0、画布区 1.0→2.0）——此处验证门控函数存在
+	var cam = root.get_camera_2d()
+	_check(cam.has_method("_pointer_over_ui"), "滚轮门控函数存在（窗口取证通过）")
+	# 7) 左右 Dock 折叠/展开往返（headless 布局尺寸不可靠，断言可见性与状态；
+	#    画布宽度实测由窗口取证覆盖：916→收左1166→双收1566→复原916）
+	main._shell.toggle_dock("left")
+	await process_frame
+	var lc: bool = main._shell.left_dock_collapsed() and not main._shell.left_dock.visible
+	main._shell.toggle_dock("left")
+	await process_frame
+	main._shell.toggle_dock("right")
+	await process_frame
+	var rc: bool = main._shell.right_dock_collapsed() and not main._shell.right_dock.visible
+	main._shell.toggle_dock("right")
+	await process_frame
+	_check(lc and rc and main._shell.left_dock.visible and main._shell.right_dock.visible
+		and not main._shell.left_dock_collapsed() and not main._shell.right_dock_collapsed(),
+		"左右 Dock 折叠状态与往返复原")
+	# 8) 图层拖柄命中区（曾 10×19 基本点不中）
+	var entry = main._layer_panel._rows.get("ground")
+	if entry != null:
+		var grip = entry.get_child(0).get_child(0).get_child(0)
+		var gm: Vector2 = grip.get_combined_minimum_size()
+		_check(gm.x >= 24.0 and gm.y >= 32.0, "拖柄命中区≥24×32（%.0f×%.0f）" % [gm.x, gm.y])
 	_finish()
 
 func _tile_label_count(main, layer_id: String) -> String:

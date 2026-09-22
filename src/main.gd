@@ -328,6 +328,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_run_map_check()
 		elif key.keycode == KEY_F8:
 			_show_connection_rules()
+		elif key.keycode == KEY_BRACKETLEFT:
+			_shell.toggle_dock("left") # 左栏收起/展开（用户需求：左右可折叠）
+		elif key.keycode == KEY_BRACKETRIGHT:
+			_shell.toggle_dock("right")
 		elif key.keycode == KEY_F1:
 			_show_shortcut_help() # 快捷键帮助浮层（UI 重构阶段 B：速记串移出状态栏）
 
@@ -363,7 +367,8 @@ func _show_shortcut_help() -> void:
 	var groups: Array = [
 		["工具", ["E 橡皮擦（+Ctrl 只清同款）", "S 选择（框选/移动/复制）", "L 直线", "G 油漆桶", "Ctrl+左键 矩形填充", "画布右键 吸管", "Tab 显隐素材面板"]],
 		["编辑", ["Ctrl+Z / Ctrl+Y 撤销 / 重做", "Ctrl+C / Ctrl+V 复制 / 粘贴", "Ctrl+A 全选 · Del 删除", "H 镜像 · R 同款替换", "T 标签 · F 收藏", "Q 聚焦选中内容"]],
-		["放置", ["左键放置/拖刷（Shift 单块）", "1-7 快捷栏素材槽（右键换绑）", "Ctrl+P 存预制件 · P 放置", "中键/空格+左键 平移 · 滚轮缩放"]],
+		["放置", ["左键放置/拖刷（Shift 单块）", "1-7 快捷栏素材槽（右键换绑）", "Ctrl+P 存预制件 · P 放置"]],
+		["视图与画布", ["滚轮缩放（悬停面板时不影响画布）", "中键/空格+左键 平移", "[ / ] 收起展开左栏 / 右栏"]],
 		["文件与检查", ["Ctrl+S 保存 · Ctrl+Shift+S 另存", "Ctrl+O 打开 · Ctrl+L 重载", "F8 连接规则 · F9 地图检查", "Ctrl+E 导出场景 · F1 本帮助"]],
 	]
 	for group in groups:

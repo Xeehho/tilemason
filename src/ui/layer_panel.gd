@@ -164,11 +164,14 @@ class LayerEntry extends PanelContainer:
 		var row1 := HBoxContainer.new()
 		row1.add_theme_constant_override("separation", 4)
 		box.add_child(row1)
-		var grip := Label.new()
+		var grip := Button.new()
+		grip.flat = true
 		grip.text = "⠿"
-		grip.modulate.a = 0.5
-		grip.mouse_filter = Control.MOUSE_FILTER_STOP # 拖柄：按下发起拖拽
-		grip.gui_input.connect(_on_grip_input)
+		grip.modulate = Color(1, 1, 1, 0.55)
+		grip.custom_minimum_size = Vector2(24, 32) # 拖柄命中区：曾 10×19 基本点不中（用户实测「拖拽不好使」）
+		grip.tooltip_text = "按住拖动排序（上=更高层级）"
+		grip.button_down.connect(func() -> void:
+			force_drag({"layer_id": str(_layer["id"]), "from_index": _panel_index_to_layer_index()}, _make_preview()))
 		row1.add_child(grip)
 		_name_btn = Button.new()
 		var shown_name := str(layer.get("name", layer.get("id", "")))
@@ -324,11 +327,6 @@ class LayerEntry extends PanelContainer:
 		if is_instance_valid(_rename_edit):
 			_rename_edit.queue_free()
 		_name_btn.visible = true
-
-	func _on_grip_input(event: InputEvent) -> void:
-		if event is InputEventMouseButton and (event as InputEventMouseButton).pressed \
-				and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
-			force_drag({"layer_id": str(_layer["id"]), "from_index": _panel_index_to_layer_index()}, _make_preview())
 
 	func _make_preview() -> Control:
 		var lab := Label.new()

@@ -21,13 +21,19 @@ func _unhandled_input(event: InputEvent) -> void:
 			else:
 				_pan_buttons.erase(mb.button_index)
 		elif mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
-			_step_zoom(1)
+			if not _pointer_over_ui():
+				_step_zoom(1) # 悬停在任何面板控件上时滚轮归 UI（列表滚动/无操作），不动画布
 		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
-			_step_zoom(-1)
+			if not _pointer_over_ui():
+				_step_zoom(-1)
 	elif event is InputEventMouseMotion:
 		var mm := event as InputEventMouseMotion
 		if not _pan_buttons.is_empty():
 			position -= mm.relative / zoom.x
+
+## 鼠标是否悬停在界面控件上（顶栏/左右 Dock/快捷栏/状态栏）——IGNORE 的画布区返回 null
+func _pointer_over_ui() -> bool:
+	return get_viewport().gui_get_hovered_control() != null
 
 func _is_pan_button(btn: MouseButton) -> bool:
 	return btn == MOUSE_BUTTON_MIDDLE \
