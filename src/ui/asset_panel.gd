@@ -483,6 +483,12 @@ func _on_thumb_pressed(btn: Button, asset_id: String) -> void:
 	_apply_card_style(btn, true)
 	asset_selected.emit(asset_id)
 
+## 清除选中卡片高亮（画布空白处右键取消选中用；不发信号——选中态由 main 持有）
+func clear_selection() -> void:
+	if _selected != null and is_instance_valid(_selected):
+		_apply_card_style(_selected, false)
+	_selected = null
+
 ## 面板缩略图：库级 64 盒缩放缓存（整数倍缩放，面板/快捷栏共用）
 func _get_thumb(asset_id: String) -> ImageTexture:
 	return _library.load_thumb(asset_id)

@@ -173,6 +173,12 @@ func _scene_eyedrop() -> void:
 	await _select("tiles/grass.png")
 	main._pick_under_mouse() # 取 (-2,-2) 处素材
 	_check(main._selected_asset_id == "demo/tiles/wall_brick.png", "吸管取到鼠标格素材（%s）" % main._selected_asset_id.get_file())
+	# 右键空白处＝取消选中（2026-09-23 用户需求回归）：清掉鼠标格内容再右键
+	_clear_world()
+	main._pick_under_mouse()
+	await process_frame
+	_check(main._selected_asset_id.is_empty() and main._panel._selected == null,
+		"右键空白取消选中（选中态清空+卡片高亮清除）")
 
 func _scene_select_and_all() -> void:
 	_clear_world()

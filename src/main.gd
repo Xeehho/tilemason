@@ -145,7 +145,7 @@ func _ready() -> void:
 	_footprint_preview.modulate = Color(0.35, 1.0, 0.45) # 绿色系：范围提示，与白色矩形工具区分
 	add_child(_footprint_preview)
 
-	print("[TileMason] 编辑器骨架启动：grid=%dpx，文档 %d 层就绪，素材 %d 项；滚轮缩放，中键/空格+左键平移，面板选素材左键放置/拖刷，右键吸管，E 橡皮擦，Ctrl+Z/Y 撤销重做" % [DEFAULT_GRID, _document.layer_count(), asset_count])
+	print("[TileMason] 编辑器骨架启动：grid=%dpx，文档 %d 层就绪，素材 %d 项；滚轮缩放，中键/空格+左键平移，面板选素材左键放置/拖刷，右键吸管（空白处取消选中），E 橡皮擦，Ctrl+Z/Y 撤销重做" % [DEFAULT_GRID, _document.layer_count(), asset_count])
 
 	if OS.get_cmdline_user_args().has("--screenshot"):
 		_capture_screenshot() # 无人值守视觉取证：摆样 + 延时截屏后退出
@@ -371,7 +371,7 @@ func _show_shortcut_help() -> void:
 	cols.add_theme_constant_override("separation", 28)
 	margin.add_child(cols)
 	var groups: Array = [
-		["工具", ["E 橡皮擦（+Ctrl 只清同款）", "S 选择（框选/移动/复制）", "L 直线", "G 油漆桶", "Ctrl+左键 矩形填充", "画布右键 吸管", "Tab 显隐素材面板"]],
+		["工具", ["E 橡皮擦（+Ctrl 只清同款）", "S 选择（框选/移动/复制）", "L 直线", "G 油漆桶", "Ctrl+左键 矩形填充", "画布右键 吸管（空白处＝取消选中）", "Tab 显隐素材面板"]],
 		["编辑", ["Ctrl+Z / Ctrl+Y 撤销 / 重做", "Ctrl+C / Ctrl+V 复制 / 粘贴", "Ctrl+A 全选 · Del 删除", "H 镜像 · R 同款替换", "T 标签 · F 收藏", "Q 聚焦选中内容"]],
 		["放置", ["左键放置/拖刷（Shift 单块）", "1-7 快捷栏素材槽（右键换绑）", "Ctrl+P 存预制件 · P 放置"]],
 		["视图与画布", ["滚轮缩放（悬停面板时不影响画布）", "中键/空格+左键 平移", "[ / ] 收起展开左栏 / 右栏"]],
@@ -1498,11 +1498,19 @@ func _end_paint() -> void:
 		return
 	_push_tile_command("笔画 %d 格" % _stroke_cells.size(), _stroke_layer, _stroke_cells, _stroke_extra, _stroke_asset_id)
 
-## 吸管：取鼠标下最上层素材并联动面板选中
+## 吸管：取鼠标下最上层素材并联动面板选中；空白处右键=取消当前选中（用户需求 2026-09-23）
 func _pick_under_mouse() -> void:
 	var picked := _view.pick_asset_id_at(mouse_cell())
 	if not picked.is_empty():
 		_panel.select_asset(picked)
+		return
+	if _selected_asset_id.is_empty():
+		return # 无选中也无内容：维持原样（右键空白菜格无副作用）
+	_selected_asset_id = ""
+	_panel.clear_selection()
+	if _status != null:
+		_status.show_notice("已取消选中", "info")
+	refresh_status()
 
 func mouse_cell() -> Vector2i:
 	return Vector2i((get_global_mouse_position() / float(DEFAULT_GRID)).floor())
@@ -1589,7 +1597,7 @@ func _toolbar_action(tool_id: String) -> void:
 			if not _select_mode:
 				_toggle_select_mode()
 		"eyedrop":
-			print("[TileMason] 吸管：在画布上右键即可吸取素材")
+			print("[TileMason] 吸管：右键素材吸取；右键空白处＝取消选中")
 		"prefab":
 			print("[TileMason] 预制件：框选内容后 Ctrl+P 保存，P 放置（左下面板管理）")
 		"undo":

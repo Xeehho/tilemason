@@ -20,7 +20,7 @@ const TOOL_GROUPS: Array = [
 	]},
 	{"title": "选择", "tools": [
 		{"id": "select", "icon": "select", "label": "选择", "hint": "选择 S：框选/移动/复制"},
-		{"id": "eyedrop", "icon": "eyedrop", "label": "吸管", "hint": "吸管（=画布右键）"},
+		{"id": "eyedrop", "icon": "eyedrop", "label": "吸管", "hint": "吸管（画布右键；空白处右键＝取消选中）"},
 	]},
 	{"title": "组织", "tools": [
 		{"id": "prefab", "icon": "prefab", "label": "预制件", "hint": "预制件：Ctrl+P 保存 / P 放置"},
