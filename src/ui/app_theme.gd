@@ -173,6 +173,12 @@ static func build() -> Theme:
 	var tab_hov := _flat(Color("1f2026"), RADIUS_MD, 0)
 	tab_hov.corner_radius_bottom_left = 0
 	tab_hov.corner_radius_bottom_right = 0
+	# 页签内边距放宽（用户反馈「三个 tab 连接太紧密」：侧 12/上下 5，留出呼吸感）
+	for sb in [tab_bg, tab_sel, tab_hov]:
+		(sb as StyleBoxFlat).content_margin_left = 12
+		(sb as StyleBoxFlat).content_margin_right = 12
+		(sb as StyleBoxFlat).content_margin_top = 5
+		(sb as StyleBoxFlat).content_margin_bottom = 5
 	t.set_stylebox("tab_unselected", "TabContainer", tab_bg)
 	t.set_stylebox("tab_selected", "TabContainer", tab_sel)
 	t.set_stylebox("tab_hovered", "TabContainer", tab_hov)
@@ -180,7 +186,7 @@ static func build() -> Theme:
 	t.set_color("font_hovered_color", "TabContainer", TEXT)
 	t.set_color("font_selected_color", "TabContainer", TEXT)
 	t.set_font_size("font_size", "TabContainer", 13)
-	t.set_constant("h_separation", "TabContainer", 2)
+	t.set_constant("h_separation", "TabContainer", 8)
 
 	# 右键/更多菜单（浮层内部=Surface-2，§P4 统一层级）
 	var pm := _flat(SURFACE_2, RADIUS_MD, 1)
