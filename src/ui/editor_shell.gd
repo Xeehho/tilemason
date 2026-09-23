@@ -85,16 +85,16 @@ var _dock_tweens := {"left": null, "right": null} ## 折叠/展开宽度过渡�
 const DOCK_TWEEN_TIME := 0.11
 
 ## 左右 Dock 折叠手柄（兼作分隔线）：点击整条收起/展开 Dock，画布自动吃满腾出空间
+## 质感反馈轮：手柄加常驻可视暗示——中置竖向握柄胶囊（悬停变金）+ 方向箭头 + 指针光标
 func _make_dock_handle(side: String) -> Button:
 	var b := Button.new()
-	b.custom_minimum_size = Vector2(14, 0)
+	b.custom_minimum_size = Vector2(18, 0)
 	b.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	b.flat = true
-	b.add_theme_font_size_override("font_size", 14)
 	b.tooltip_text = ("收起/展开左侧栏（[ 键）" if side == "left" else "收起/展开右侧栏（] 键）")
-	b.text = "⟨" if side == "left" else "⟩"
-	# 手柄同时承担 Dock 的视觉分隔线；Button.flat 不绘制背景，单独补 1px
-	# ColorRect，避免 1600/1280 两档下左右区域粘成一整块。
+	b.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	# 手柄同时承担 Dock 的视觉分隔线；1px Divider 色线贴 Dock 边
+	# （截图探针按 x=Dock宽 断言此线，位置不可动）
 	var divider := ColorRect.new()
 	divider.color = AppTheme.DIVIDER
 	divider.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -107,10 +107,62 @@ func _make_dock_handle(side: String) -> Button:
 	divider.offset_right = 1.0
 	divider.offset_bottom = 0.0
 	b.add_child(divider)
+	# 中置竖向握柄胶囊（6×52，常态 Surface-3、悬停金色）：「这里可以点」的常驻暗示
+	var grip := Panel.new()
+	var gs := StyleBoxFlat.new()
+	gs.bg_color = AppTheme.SURFACE_3
+	gs.set_corner_radius_all(3)
+	grip.add_theme_stylebox_override("panel", gs)
+	grip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	grip.anchor_left = 0.5
+	grip.anchor_right = 0.5
+	grip.anchor_top = 0.5
+	grip.anchor_bottom = 0.5
+	grip.offset_left = -3
+	grip.offset_right = 3
+	grip.offset_top = -26
+	grip.offset_bottom = 26
+	b.add_child(grip)
+	# 方向箭头（随折叠状态翻转，见 _set_handle_arrow）——正文色常亮，悬停变金
+	var arrow := Label.new()
+	arrow.text = "‹" if side == "left" else "›"
+	arrow.add_theme_font_size_override("font_size", 17)
+	arrow.modulate = AppTheme.TEXT
+	arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	arrow.set_anchors_preset(Control.PRESET_CENTER)
+	b.add_child(arrow)
+	b.set_meta("grip_style", gs)
+	b.set_meta("arrow", arrow)
+	# 悬停/按压反馈：按钮区淡亮 + 胶囊变金 + 箭头提亮
+	var hov := StyleBoxFlat.new()
+	hov.bg_color = Color(1, 1, 1, 0.05)
+	var prs := StyleBoxFlat.new()
+	prs.bg_color = Color(1, 1, 1, 0.09)
+	b.add_theme_stylebox_override("hover", hov)
+	b.add_theme_stylebox_override("pressed", prs)
+	b.mouse_entered.connect(func() -> void:
+		gs.bg_color = AppTheme.ACCENT
+		arrow.modulate = AppTheme.ACCENT)
+	b.mouse_exited.connect(func() -> void:
+		gs.bg_color = AppTheme.SURFACE_3
+		arrow.modulate = AppTheme.TEXT)
 	b.pressed.connect(func() -> void:
 		toggle_dock(side))
 	_body_ref.add_child(b) # setup 中在 body 建好后调用
 	return b
+
+## 折叠状态翻转手柄箭头方向（左栏收起后指向右 ⟩，右栏收起后指向左 ⟨）
+func _set_handle_arrow(side: String, collapsed: bool) -> void:
+	var b := _left_handle if side == "left" else _right_handle
+	if b == null:
+		return
+	var arrow: Label = b.get_meta("arrow", null)
+	if arrow == null:
+		return
+	if side == "left":
+		arrow.text = "›" if collapsed else "‹"
+	else:
+		arrow.text = "‹" if collapsed else "›"
 
 var _body_ref: Control
 
@@ -142,22 +194,19 @@ func _animate_dock(side: String) -> void:
 func toggle_dock(side: String) -> void:
 	if side == "left":
 		_left_collapsed = not _left_collapsed
-		if _left_handle != null:
-			_left_handle.text = "⟩" if _left_collapsed else "⟨"
+		_set_handle_arrow("left", _left_collapsed)
 	else:
 		# Tab 隐藏内容后点击手柄应直接恢复素材栏，而不是进入“空 Dock 折叠”状态。
 		if not _right_content_visible:
 			_right_content_visible = true
 			_right_collapsed = false
-			if _right_handle != null:
-				_right_handle.text = "⟩"
+			_set_handle_arrow("right", false)
 			print("[TileMason] right侧栏：已恢复（手柄点击）")
 			_animate_dock("right")
 			left_dock_resized.emit(_dock_target_w("right"))
 			return
 		_right_collapsed = not _right_collapsed
-		if _right_handle != null:
-			_right_handle.text = "⟨" if _right_collapsed else "⟩"
+		_set_handle_arrow("right", _right_collapsed)
 	_animate_dock(side)
 	left_dock_resized.emit(_dock_target_w(side))
 	print("[TileMason] %s侧栏：%s" % [side, "已收起（再点手柄或快捷键展开）" if (side == "left" and _left_collapsed) or (side == "right" and _right_collapsed) else "已展开"])
