@@ -1242,7 +1242,11 @@ func _hotbar_activate(index: int) -> void:
 	if asset_id.is_empty():
 		print("[TileMason] 空槽：先选一个素材，再右键此格绑定")
 		return
-	_panel.select_asset(asset_id) # 走面板选中链路（选中/状态栏/预览联动）
+	# 走面板选中链路（选中/状态栏/预览联动）；失效绑定居右键重绑引导（§P4 不可用操作给原因）
+	if not _panel.select_asset(asset_id):
+		if _status != null:
+			_status.show_notice("该槽素材暂不可用（素材包未扫描或已移除）：先在素材面板选中一次，再右键此格重新绑定", "warn")
+		print("[TileMason] 快捷栏素材无效：%s" % asset_id)
 
 ## 右键自定义槽位：绑定当前选中素材；无选中=清空该槽；落盘 hotbar.json
 func _hotbar_customize(index: int) -> void:

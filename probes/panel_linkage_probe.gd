@@ -165,6 +165,14 @@ func _group_a_panel_to_tools() -> void:
 		var big_tex: Texture2D = main._panel._get_thumb(big_id)
 		_check(over_box == 0 and max_w2 <= 104.0 and maxi(big_tex.get_width(), big_tex.get_height()) <= 64,
 			"长安大图卡片限盒（超限=%d 最大宽=%.0f 贴图≤64）" % [over_box, max_w2])
+		# A6b 分组素材经面板选中链路（底部快捷栏 1-7 / 吸管同路）——
+		# 2026-09-23 用户实测「快捷栏点用户导入素材无效」修复回归
+		main._panel.select_asset("demo/tiles/grass.png") # 先切走（分类叶路由）
+		await process_frame
+		var sel_ok: bool = main._panel.select_asset(big_id)
+		await process_frame
+		_check(sel_ok and main._panel._buttons.has(big_id) and main._selected_asset_id == big_id,
+			"分组素材经快捷栏链路选中（回真+网格含该项+选中态联动）")
 	# A7 刷新按钮不破坏选中（rescan 链路）
 	await _select("tiles/grass.png")
 	main._panel.rescan_requested.emit()

@@ -36,20 +36,24 @@ var _favorite_ids: Array = [] # 收藏（F 键切换）
 var _tag_ids := {} # 标签反向索引 {tag: [asset_id]}（每个 #标签 一条 chip）
 var _thumbs := {} # asset_id -> ImageTexture（整数倍缩放后的缩略图）
 
-## 外部指定选中（吸管等入口）：切换到对应分类并高亮（会发 asset_selected 信号）
-func select_asset(asset_id: String) -> void:
+## 外部指定选中（快捷栏/吸管等入口）：切换到素材所在页并高亮（发 asset_selected）
+## 返回是否成功——带 group 的素材（用户导入包）路由到分组叶：分类叶只含无分组素材，
+## 旧按分类路由下分组素材永远不进网格，快捷栏点击成为无声空操作（2026-09-23 实测复现）
+func select_asset(asset_id: String) -> bool:
 	if not _buttons.has(asset_id):
 		var asset := _library.get_asset(asset_id)
 		if asset.is_empty():
-			return
-		# 目标素材不在当前缩略图区：先切到它所属分类再选（三层树按 meta 遍历，
-		# 旧 item_count/get_item_metadata(index) 是 ItemList 残留 API，Tree 上会抛错中断选中）
-		var meta := str(asset["category"])
-		if _select_by_meta(_category_list.get_root(), meta):
-			_on_category_selected(meta)
+			return false
+		var group := str(asset.get("group", ""))
+		var meta := ("__group:" + group) if not group.is_empty() else str(asset["category"])
+		if not _select_by_meta(_category_list.get_root(), meta):
+			return false
+		_on_category_selected(meta)
 	var btn: Button = _buttons.get(asset_id)
-	if btn != null:
-		_on_thumb_pressed(btn, asset_id)
+	if btn == null:
+		return false
+	_on_thumb_pressed(btn, asset_id)
+	return true
 
 func setup(library: AssetLibrary) -> void:
 	_library = library
