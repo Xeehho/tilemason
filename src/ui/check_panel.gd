@@ -53,7 +53,7 @@ func show_results(issues: Array) -> void:
 	if issues.is_empty():
 		var ok := Label.new()
 		ok.text = "✓ 通过：道路连通，无建筑堵路"
-		ok.modulate = AppTheme.ACCENT
+		ok.modulate = AppTheme.SUCCESS ## 检查通过走 SUCCESS 通道（§3.2：与金色强调分离）
 		_list_box.add_child(ok)
 		return
 	var head := Label.new()

@@ -107,16 +107,16 @@ func _test_canvas_region(img: Image) -> void:
 	_check(corner_px.r < 0.25 and corner_px.g < 0.25, "L 拐角自动变弯道（右中=路缘深色）")
 	_check(endcap_px.r < 0.25 and endcap_px.g < 0.25, "端头自动变端头变体（左中=路缘深色）")
 
-## 壳层布局回归（UI 重构阶段 D）：左右 Dock 安全区底色 + 槽位 Divider 线可见
+## 壳层布局回归（质感方案 P0 后 Surface-1=#22232a）：左右 Dock 安全区底色 + 槽位 Divider 线可见
 func _test_layout_regions(img: Image) -> void:
-	# 左 Dock（TabContainer）区域主色 = Surface-1 #26262c（y 起点 60 避开 tab 条与圆角）
-	var left_hits := _count_region(img, 4, left_dock_width - 4, Color("26262c"))
+	# 左 Dock（TabContainer）区域主色 = Surface-1 #22232a（y 起点 60 避开 tab 条与圆角）
+	var left_hits := _count_region(img, 4, left_dock_width - 4, Color("22232a"))
 	var left_total := ((left_dock_width - 8) / 2) * ((img.get_height() - 100) / 2)
-	_check(left_hits > left_total * 0.3, "左 Dock 面板底色（#26262c 占比 %.0f%% > 30%%）" % (100.0 * left_hits / maxi(left_total, 1)))
+	_check(left_hits > left_total * 0.3, "左 Dock 面板底色（#22232a 占比 %.0f%% > 30%%）" % (100.0 * left_hits / maxi(left_total, 1)))
 	# 右 Dock 主色同断言（避开缩略图特征色区，取中段高度）
-	var right_hits := _count_region(img, img.get_width() - panel_width + 4, img.get_width(), Color("26262c"))
+	var right_hits := _count_region(img, img.get_width() - panel_width + 4, img.get_width(), Color("22232a"))
 	var right_total := ((panel_width - 4) / 2) * ((img.get_height() - 100) / 2)
-	_check(right_hits > right_total * 0.3, "右 Dock 面板底色（#26262c 占比 %.0f%% > 30%%）" % (100.0 * right_hits / maxi(right_total, 1)))
+	_check(right_hits > right_total * 0.3, "右 Dock 面板底色（#22232a 占比 %.0f%% > 30%%）" % (100.0 * right_hits / maxi(right_total, 1)))
 	# Divider 线：左 Dock 右缘竖线 #555761（扫描 3 列，任一列命中即算可见）
 	var divider_col := -1
 	for dx in 3:

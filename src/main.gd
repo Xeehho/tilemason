@@ -74,6 +74,7 @@ var _line_armed := false ## 已定起点，等待终点
 var _line_start := Vector2i.ZERO
 var _line_sprites: Array = [] ## 直线预览 Sprite 池
 var _status: StatusBar ## 底部状态栏（当前工具/素材常驻可见）
+var _restored_from_autosave := false ## 本次启动从自动档恢复（状态栏文件段提示「已自动恢复」）
 
 func _ready() -> void:
 	_app_theme = AppTheme.build() # 统一暗色主题（直接挂各 UI 根——root.theme 跨层传播实证不可靠）
@@ -111,11 +112,14 @@ func _ready() -> void:
 	elif FileAccess.file_exists(AUTOSAVE_PATH):
 		if _load_map_from(AUTOSAVE_PATH):
 			_current_map_path = MAP_PATH # 继续编辑仍指向手动档槽位
+			_restored_from_autosave = true # 状态栏就绪后提示「已自动恢复」（§4.4）
 			print("[TileMason] 手动档缺失，已从自动保存恢复")
 
 	_build_toolbar()
 	_build_layer_panel()
 	_build_status_bar()
+	if _restored_from_autosave and _status != null:
+		_status.mark_restored()
 	_build_hotbar()
 	_connect_status_signals()
 	_setup_autosave()
@@ -417,6 +421,8 @@ func _save_map() -> void:
 		_rotate_history()
 	if _document.save_to_file(_current_map_path):
 		_dirty = false
+		if _status != null:
+			_status.mark_saved() # 文件状态→已保存 + 保存完成一闪反馈（§P4）
 		var tiles := 0
 		for layer in _document.get_layers():
 			tiles += _document.get_tile_coords(str((layer as Dictionary)["id"])).size()
@@ -961,6 +967,8 @@ func _export_map() -> void:
 		print("[TileMason] [导出] %s" % str(w))
 	if not result.get("ok", false):
 		print("[TileMason] 场景导出失败：%s" % str(result.get("warnings", "")))
+		if _status != null:
+			_status.show_notice("导出失败：%s" % str(result.get("warnings", "")), "error")
 		return
 	var json_path := _current_map_path.get_basename() + ".export.json"
 	var jf := FileAccess.open(json_path, FileAccess.WRITE)
@@ -969,6 +977,8 @@ func _export_map() -> void:
 		jf = null
 	print("[TileMason] 导出完成：场景 %s（%d 方块 %d 物件）｜ JSON %s" % [
 		ProjectSettings.globalize_path(str(result["path"])), int(result["tiles"]), int(result["props"]), json_path])
+	if _status != null:
+		_status.show_notice("导出完成：场景已生成（详见日志路径）", "ok")
 
 ## 选中内容存为预制件（design.md §7）：相对化快照落盘并设为当前
 func _save_prefab_from_selection() -> void:
@@ -1534,8 +1544,19 @@ func _build_toolbar() -> void:
 	_toolbar = Toolbar.new()
 	_toolbar.setup()
 	_toolbar.tool_requested.connect(_toolbar_action)
+	_toolbar.action_requested.connect(_toolbar_workflow)
 	_toolbar.theme = _app_theme
 	_shell.mount_top(_toolbar) # 壳层顶栏安全区（阶段 A：容器布局替代绝对偏移）
+
+## 工作流组按钮（质感方案 P1）：保存/检查/导出分发到既有函数，无新业务
+func _toolbar_workflow(action_id: String) -> void:
+	match action_id:
+		"save":
+			_save_map()
+		"check":
+			_run_map_check()
+		"export":
+			_export_map()
 ## 工具栏点击 → 分发到既有模式切换；同时刷新高亮
 func _toolbar_action(tool_id: String) -> void:
 	match tool_id:
@@ -1573,10 +1594,11 @@ func _toolbar_action(tool_id: String) -> void:
 			_do_redo()
 	_refresh_toolbar()
 
-## 汇总当前活动工具，刷新工具栏高亮（任何模式切换后经 refresh_status 联动）
+## 汇总当前活动工具，刷新工具栏高亮（任何模式/素材变化后经 refresh_status 联动）
 func _refresh_toolbar() -> void:
 	if _toolbar == null:
 		return
+	_toolbar.set_document(_current_map_path) # 顶栏文档名随打开/另存更新（§4.1）
 	var id := "pen"
 	if _eraser_mode:
 		id = "eraser"
@@ -1606,6 +1628,8 @@ func _build_layer_panel() -> void:
 	_layer_panel.setup(_document)
 	if not _layer_panel.layer_activity_requested.is_connected(_on_active_layer):
 		_layer_panel.layer_activity_requested.connect(_on_active_layer)
+	if not _layer_panel.notice_requested.is_connected(_on_ui_notice):
+		_layer_panel.notice_requested.connect(_on_ui_notice) # 图层删除失败等 → 状态栏短暂通知（§P4）
 	_shell.mount_left_tab(_layer_panel, "图层") # 左 Dock 页签（阶段 C §5.2）
 	if _prefab_panel == null:
 		_prefab_panel = PrefabPanel.new()
@@ -1676,6 +1700,11 @@ func refresh_status() -> void:
 	_status.set_segments(pos_text, tool, asset_text, file_name)
 	_status.set_dirty(_dirty)
 
+## UI 轻量通知（图层删除失败/自动保存完成/导出结果 → 状态栏短暂显示）
+func _on_ui_notice(text: String, kind: String) -> void:
+	if _status != null:
+		_status.show_notice(text, kind)
+
 ## 图层属性变化影响素材落层提示（锁定警示），载入新文档后重连
 func _connect_status_signals() -> void:
 	if not _document.layer_changed.is_connected(_on_doc_layer_changed):
@@ -1695,6 +1724,8 @@ func _auto_save() -> void:
 		return
 	if _document.save_to_file(AUTOSAVE_PATH):
 		_dirty = false
+		if _status != null:
+			_status.show_notice("已自动保存到自动档", "ok") # 保存完成短暂反馈（§P4；手动档仍以下次 Ctrl+S 为准）
 		print("[TileMason] 自动保存：%s" % AUTOSAVE_PATH)
 
 func _on_doc_layer_changed(_layer_id: String, _key: String) -> void:
@@ -1765,12 +1796,17 @@ func _capture_export_shot() -> void:
 ## 须窗口模式运行，headless 无渲染
 func _capture_screenshot() -> void:
 	_demo_place_for_screenshot()
+	# Tab 隐藏素材面板取证档（质感方案 §9 第五项：三档截图之一）
+	if OS.get_cmdline_user_args().has("--tab-hidden"):
+		_panel.visible = false
+		_shell.set_right_content_visible(false)
 	# 选中建筑并把鼠标移到画布空位：截图中展示半透明放置预览
 	# 走面板选中链路（同步产生「最近使用」记录）
 	_panel.select_asset("demo/props/house.png")
 	get_viewport().warp_mouse(Vector2(150, 330))
 	# 确定性取证：warp 在后台窗口下不稳定，固定画一个范围框（世界 256,256 起占 6×6 格）
 	_footprint_demo_lock = true
+	_layer_panel.set_active_layer("deco") # 取证展示活动层样式（左侧 Accent 条+▸）
 	_footprint_preview.set_rect_px(Rect2(256, 256, 96, 96))
 	_footprint_preview.modulate = Color(0.35, 1.0, 0.45) # 取证固定绿框（遮挡警示运行时动态变色，另行像素取证）
 	_footprint_preview.visible = true

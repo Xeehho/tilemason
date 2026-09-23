@@ -160,11 +160,11 @@ func _group_a_panel_to_tools() -> void:
 		for k in main._panel._buttons.keys():
 			var ms2: Vector2 = (main._panel._buttons[k] as Control).get_combined_minimum_size()
 			max_w2 = maxf(max_w2, ms2.x)
-			if ms2.x > 70 or ms2.y > 70:
+			if ms2.x > 104 or ms2.y > 130: # 卡片盒 100 宽（缩略图仍限 64，P2 卡片化）
 				over_box += 1
 		var big_tex: Texture2D = main._panel._get_thumb(big_id)
-		_check(over_box == 0 and max_w2 <= 64.0 and maxi(big_tex.get_width(), big_tex.get_height()) <= 64,
-			"长安大图缩略图限盒（超限=%d 最大宽=%.0f 贴图≤64）" % [over_box, max_w2])
+		_check(over_box == 0 and max_w2 <= 104.0 and maxi(big_tex.get_width(), big_tex.get_height()) <= 64,
+			"长安大图卡片限盒（超限=%d 最大宽=%.0f 贴图≤64）" % [over_box, max_w2])
 	# A7 刷新按钮不破坏选中（rescan 链路）
 	await _select("tiles/grass.png")
 	main._panel.rescan_requested.emit()

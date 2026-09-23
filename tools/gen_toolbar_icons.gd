@@ -16,7 +16,10 @@ func _init() -> void:
 	_save("prefab", _draw_prefab())    # 预制件
 	_save("undo", _draw_undo())        # 撤销
 	_save("redo", _draw_redo())        # 重做
-	print("[TileMason] 工具图标生成完毕（10 件）")
+	_save("save", _draw_save())        # 保存（工作流组，质感方案 P1）
+	_save("check", _draw_check())      # 检查
+	_save("export", _draw_export())    # 导出
+	print("[TileMason] 工具图标生成完毕（13 件）")
 	quit(0)
 
 func _save(name: String, img: Image) -> void:
@@ -129,4 +132,51 @@ func _draw_prefab() -> Image:
 	_rect(img, 13, 5, 6, 5, c)
 	_rect(img, 5, 13, 6, 5, c)  # 下块
 	_rect(img, 13, 13, 6, 5, Color(0.55, 0.45, 0.75))
+	return img
+
+func _draw_save() -> Image: # 软盘：轮廓 + 护标签条
+	var img := _canvas()
+	var c := Color(0.6, 0.78, 0.95)
+	_rect(img, 4, 4, 16, 16, c)          # 外形
+	_rect(img, 6, 6, 12, 12, Color(0, 0, 0, 0)) # 透明内芯（覆盖为底色不可行，改用深色格）
+	_rect(img, 6, 6, 12, 12, Color(0.12, 0.13, 0.16))
+	_rect(img, 8, 6, 8, 6, c)            # 护标签
+	_rect(img, 9, 13, 6, 4, c)           # 底部读片条
+	return img
+
+func _draw_check() -> Image: # 剪贴板 + 对勾
+	var img := _canvas()
+	var c := Color(0.55, 0.82, 0.6)
+	_rect(img, 5, 5, 14, 15, c)          # 板身
+	_rect(img, 7, 7, 10, 11, Color(0.12, 0.13, 0.16))
+	_rect(img, 9, 4, 6, 3, c)            # 顶部夹子
+	var tick := Color(0.55, 0.9, 0.6)
+	_px(img, 8, 12, tick)                # 对勾
+	_px(img, 9, 13, tick)
+	_px(img, 10, 14, tick)
+	_px(img, 11, 13, tick)
+	_px(img, 12, 12, tick)
+	_px(img, 13, 11, tick)
+	_px(img, 14, 10, tick)
+	return img
+
+func _draw_export() -> Image: # 托盘 + 上行箭头（交付/导出）
+	var img := _canvas()
+	var c := Color(0.92, 0.75, 0.45)
+	for x in range(4, 20):               # 托盘底边
+		_px(img, x, 18, c)
+		_px(img, x, 19, c)
+	_rect(img, 4, 16, 2, 2, c)
+	_rect(img, 18, 16, 2, 2, c)
+	for y in range(6, 14):               # 箭杆
+		_px(img, 11, y, c)
+		_px(img, 12, y, c)
+	_px(img, 11, 5, c)                   # 箭头折角
+	_px(img, 12, 5, c)
+	_px(img, 9, 7, c)
+	_px(img, 10, 6, c)
+	_px(img, 13, 6, c)
+	_px(img, 14, 7, c)
+	_px(img, 8, 8, c)
+	_px(img, 15, 8, c)
 	return img

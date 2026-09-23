@@ -81,6 +81,8 @@ var _right_collapsed := false
 var _right_content_visible := true ## Tab 隐藏素材内容时同步释放 Dock 空间，保留折叠手柄
 var _left_handle: Button
 var _right_handle: Button
+var _dock_tweens := {"left": null, "right": null} ## 折叠/展开宽度过渡（§P4：100-120ms，不影响画布像素对齐——只动布局宽）
+const DOCK_TWEEN_TIME := 0.11
 
 ## 左右 Dock 折叠手柄（兼作分隔线）：点击整条收起/展开 Dock，画布自动吃满腾出空间
 func _make_dock_handle(side: String) -> Button:
@@ -112,29 +114,52 @@ func _make_dock_handle(side: String) -> Button:
 
 var _body_ref: Control
 
-## 折叠/展开（side="left"/"right"）；信号宽度变化供相机取景联动
+## Dock 目标宽（0=收起；随标准/紧凑档与折叠状态推导）
+func _dock_target_w(side: String) -> float:
+	if side == "left":
+		if _left_collapsed:
+			return 0.0
+		return LEFT_W_COMPACT if compact else LEFT_W
+	if _right_collapsed or not _right_content_visible:
+		return 0.0
+	return RIGHT_W_COMPACT if compact else RIGHT_W
+
+## 宽度过渡动画：收起=缩到 0 后隐藏；展开=先显示再动画到位（终点精确落目标宽）
+func _animate_dock(side: String) -> void:
+	var dock: Control = left_dock if side == "left" else right_dock
+	var target := _dock_target_w(side)
+	var old: Tween = _dock_tweens.get(side)
+	if old != null and old is Tween and (old as Tween).is_valid():
+		(old as Tween).kill() # 快速往返：从当前宽度续走，避免中途回跳
+	dock.visible = true
+	var tw := create_tween()
+	tw.tween_property(dock, "custom_minimum_size:x", target, DOCK_TWEEN_TIME)
+	if target <= 0.0:
+		tw.tween_callback(func() -> void: dock.visible = false)
+	_dock_tweens[side] = tw
+
+## 折叠/展开（side="left"/"right"）；信号宽度变化供相机取景联动用
 func toggle_dock(side: String) -> void:
 	if side == "left":
 		_left_collapsed = not _left_collapsed
-		left_dock.visible = not _left_collapsed
 		if _left_handle != null:
 			_left_handle.text = "⟩" if _left_collapsed else "⟨"
-		left_dock_resized.emit(0.0 if _left_collapsed else left_dock.custom_minimum_size.x)
 	else:
 		# Tab 隐藏内容后点击手柄应直接恢复素材栏，而不是进入“空 Dock 折叠”状态。
 		if not _right_content_visible:
 			_right_content_visible = true
 			_right_collapsed = false
-			right_dock.visible = true
 			if _right_handle != null:
 				_right_handle.text = "⟩"
 			print("[TileMason] right侧栏：已恢复（手柄点击）")
+			_animate_dock("right")
+			left_dock_resized.emit(_dock_target_w("right"))
 			return
 		_right_collapsed = not _right_collapsed
-		right_dock.visible = not _right_collapsed and _right_content_visible
 		if _right_handle != null:
 			_right_handle.text = "⟨" if _right_collapsed else "⟩"
-		left_dock_resized.emit(0.0 if _right_collapsed else right_dock.custom_minimum_size.x)
+	_animate_dock(side)
+	left_dock_resized.emit(_dock_target_w(side))
 	print("[TileMason] %s侧栏：%s" % [side, "已收起（再点手柄或快捷键展开）" if (side == "left" and _left_collapsed) or (side == "right" and _right_collapsed) else "已展开"])
 
 func left_dock_collapsed() -> bool:
@@ -148,7 +173,7 @@ func set_right_content_visible(visible: bool) -> void:
 	_right_content_visible = visible
 	if right_dock == null or _right_collapsed:
 		return
-	right_dock.visible = visible
+	_animate_dock("right")
 
 ## 紧凑模式（1280×720 档）动态跟踪视口宽：headless 启动早期视口仅 64px、
 ## 窗口运行中用户也会拖拽尺寸——size_changed 驱动而非 _ready 一次判定
@@ -162,12 +187,15 @@ func _update_compact() -> void:
 	if want == compact:
 		return
 	compact = want
-	if compact:
-		left_dock.custom_minimum_size = Vector2(LEFT_W_COMPACT, 0)
-		right_dock.custom_minimum_size = Vector2(RIGHT_W_COMPACT, 0)
-	else:
-		left_dock.custom_minimum_size = Vector2(LEFT_W, 0)
-		right_dock.custom_minimum_size = Vector2(RIGHT_W, 0)
+	# 档位切换瞬跳到新目标宽（杀掉在途过渡，避免动画终点停在旧档宽度）
+	for side in ["left", "right"]:
+		var old = _dock_tweens.get(side)
+		if old is Tween and (old as Tween).is_valid():
+			(old as Tween).kill()
+		var dock: Control = left_dock if side == "left" else right_dock
+		var target := _dock_target_w(side)
+		dock.custom_minimum_size = Vector2(target, dock.custom_minimum_size.y)
+		dock.visible = target > 0.0
 	print("[TileMason] 壳层%s模式：%dpx 视口（左 %.0f / 右 %.0f）" % [
 		"紧凑" if compact else "标准", int(vw),
 		LEFT_W_COMPACT if compact else LEFT_W, RIGHT_W_COMPACT if compact else RIGHT_W])

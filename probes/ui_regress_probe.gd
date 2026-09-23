@@ -96,21 +96,21 @@ func _run() -> void:
 	#    由窗口模式取证覆盖（实测：面板区 2.0→2.0、画布区 1.0→2.0）——此处验证门控函数存在
 	var cam = root.get_camera_2d()
 	_check(cam.has_method("_pointer_over_ui"), "滚轮门控函数存在（窗口取证通过）")
-	# 7) 左右 Dock 折叠/展开往返（headless 布局尺寸不可靠，断言可见性与状态；
+	# 7) 左右 Dock 折叠/展开往返（P4 起折叠为 110ms 宽度过渡——须等动画走完再断言可见性；
 	#    画布宽度实测由窗口取证覆盖：916→收左1166→双收1566→复原916）
 	main._shell.toggle_dock("left")
-	await process_frame
+	await _dock_frames()
 	var lc: bool = main._shell.left_dock_collapsed() and not main._shell.left_dock.visible
 	main._shell.toggle_dock("left")
-	await process_frame
+	await _dock_frames()
 	main._shell.toggle_dock("right")
-	await process_frame
+	await _dock_frames()
 	var rc: bool = main._shell.right_dock_collapsed() and not main._shell.right_dock.visible
 	main._shell.toggle_dock("right")
-	await process_frame
+	await _dock_frames()
 	_check(lc and rc and main._shell.left_dock.visible and main._shell.right_dock.visible
 		and not main._shell.left_dock_collapsed() and not main._shell.right_dock_collapsed(),
-		"左右 Dock 折叠状态与往返复原")
+		"左右 Dock 折叠状态与往返复原（含宽度过渡）")
 	# 8) 图层拖柄命中区 + 标准拖拽数据链（GripLabel._get_drag_data → can_drop → drop 层序）
 	var entry = main._layer_panel._rows.get("ground")
 	if entry != null:
@@ -130,6 +130,10 @@ func _run() -> void:
 		var clean2: bool = main._layer_panel._drag_pending == null and not main._layer_panel._drag_active
 		_check(tracked and clean2, "手动拖拽状态机（跟踪/释放清零；激活段窗口取证）")
 	_finish()
+
+## 等待 Dock 折叠/展开宽度过渡走完（0.11s；headless 帧间隔极小，按墙钟 0.3s 等更稳）
+func _dock_frames() -> void:
+	await create_timer(0.3).timeout
 
 func _tile_label_count(main, layer_id: String) -> String:
 	if not main._layer_panel._rows.has(layer_id):

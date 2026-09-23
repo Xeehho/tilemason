@@ -6,6 +6,7 @@ extends PanelContainer
 ## 添加层合并为单按钮弹类型菜单；删除/排序收进 ⋯ 菜单
 
 signal layer_activity_requested(layer_id: String) ## 点击行：设为活动层
+signal notice_requested(text: String, kind: String) ## 轻量状态通知（warn/error/info，状态栏短暂显示）
 
 var _document: MapDocument
 var _rows := {} # layer_id -> LayerEntry
@@ -199,17 +200,22 @@ class LayerEntry extends PanelContainer:
 	func setup(panel: LayerPanel, layer: Dictionary, is_active: bool) -> void:
 		_panel = panel
 		_layer = layer
+		var is_locked := bool(layer.get("locked", false))
+		var is_hidden := not bool(layer.get("visible", true))
+		# 卡片底（§P3）：常态 Surface-2；活动层=SURFACE_ACTIVE 低亮底+左侧 3px Accent 条
+		#（弱化整行金边，▸ 符号保留为第二通道）
 		var sb := StyleBoxFlat.new()
-		sb.bg_color = AppTheme.BG_DARK
-		sb.set_corner_radius_all(6)
+		sb.bg_color = AppTheme.SURFACE_ACTIVE if is_active else AppTheme.SURFACE_2
+		sb.set_corner_radius_all(AppTheme.RADIUS_MD)
 		sb.content_margin_left = 4
 		sb.content_margin_right = 4
 		sb.content_margin_top = 2
 		sb.content_margin_bottom = 2
-		var is_locked := bool(layer.get("locked", false))
+		sb.set_border_width_all(1)
+		sb.border_color = Color(1, 1, 1, 0.06)
 		if is_active:
-			sb.set_border_width_all(1)
-			sb.border_color = AppTheme.ACCENT_DIM # 活动层金边（+▸ 符号双通道表达）
+			sb.border_width_left = 3
+			sb.border_color = AppTheme.ACCENT # 左侧金色标记条
 		add_theme_stylebox_override("panel", sb)
 		var box := VBoxContainer.new()
 		box.add_theme_constant_override("separation", 0)
@@ -239,11 +245,13 @@ class LayerEntry extends PanelContainer:
 		_name_btn.custom_minimum_size = Vector2(0, 32)
 		_name_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		_name_btn.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		_name_btn.tooltip_text = shown_name # 截断兜底：hover 见全名（§3.3）
+		_name_btn.tooltip_text = shown_name + _state_note() # 截断兜底：hover 见全名+状态说明（§3.3）
+		if is_hidden: # 隐藏层整体淡化（轻量状态说明，§P3）
+			_name_btn.modulate = Color(1, 1, 1, 0.5)
 		row1.add_child(_name_btn)
 		_count_label = Label.new()
 		_count_label.add_theme_font_size_override("font_size", 12)
-		_count_label.modulate.a = 0.6
+		_count_label.modulate = Color(1, 1, 1, 0.3) if is_hidden else Color(1, 1, 1, 0.6)
 		_count_label.text = _count_text()
 		_count_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row1.add_child(_count_label)
@@ -251,8 +259,9 @@ class LayerEntry extends PanelContainer:
 		_name_btn.button_down.connect(_on_name_pressed)
 
 		# 行2：显隐 / 锁 / 透明度 / 更多 —— 按钮 32px 档命中区，文字态随开关切换
+		# （紧凑档预算：行2 最低宽须 ≤212，否则 Dock min 被顶过 224——锁态文字收紧到 12px/40 宽）
 		var row2 := HBoxContainer.new()
-		row2.add_theme_constant_override("separation", 4)
+		row2.add_theme_constant_override("separation", 3)
 		box.add_child(row2)
 		var visible_btn := Button.new()
 		visible_btn.toggle_mode = true
@@ -262,16 +271,24 @@ class LayerEntry extends PanelContainer:
 		visible_btn.custom_minimum_size = Vector2(34, 28)
 		visible_btn.toggled.connect(func(on: bool) -> void:
 			visible_btn.text = "显" if on else "隐"
+			# 隐藏/恢复同步淡化/还原行1（轻量状态说明，§P3）
+			var dim := Color(1, 1, 1, 0.3) if not on else Color(1, 1, 1, 0.6)
+			_name_btn.modulate = Color(1, 1, 1, 0.5) if not on else Color.WHITE
+			_count_label.modulate = dim
+			_name_btn.tooltip_text = str(_layer.get("name", "")) + _state_note()
 			panel._document.set_layer_property(str(_layer["id"]), "visible", on))
 		row2.add_child(visible_btn)
 		var lock_btn := Button.new()
 		lock_btn.toggle_mode = true
 		lock_btn.button_pressed = is_locked
-		lock_btn.text = "锁"
-		lock_btn.tooltip_text = "锁定后不可放置/擦除"
-		lock_btn.custom_minimum_size = Vector2(34, 28)
+		# 锁定=锁文本态（已锁/未锁）+ 警示色，不只靠颜色（§P3）
+		lock_btn.text = "已锁" if is_locked else "未锁"
+		lock_btn.add_theme_font_size_override("font_size", 12)
+		lock_btn.tooltip_text = "锁定后不可放置/擦除（当前：已锁定）" if is_locked else "锁定后不可放置/擦除"
+		lock_btn.custom_minimum_size = Vector2(40, 28)
 		lock_btn.modulate = AppTheme.WARNING if is_locked else Color(1, 1, 1, 0.6)
 		lock_btn.toggled.connect(func(on: bool) -> void:
+			lock_btn.text = "已锁" if on else "未锁"
 			lock_btn.modulate = AppTheme.WARNING if on else Color(1, 1, 1, 0.6)
 			lock_btn.tooltip_text = "锁定后不可放置/擦除（当前：已锁定）" if on else "锁定后不可放置/擦除"
 			panel._document.set_layer_property(str(_layer["id"]), "locked", on))
@@ -292,16 +309,33 @@ class LayerEntry extends PanelContainer:
 		pct.text = "%d%%" % roundi(float(layer.get("opacity", 1.0)) * 100.0)
 		pct.add_theme_font_size_override("font_size", 11)
 		pct.modulate.a = 0.55
-		pct.custom_minimum_size = Vector2(30, 0)
+		pct.custom_minimum_size = Vector2(28, 0)
 		row2.add_child(pct)
 		row2.add_child(_make_more_menu())
 
-	## 内容计数（tile 层数格 / object 层数件）
+	## 内容计数（tile 层数格 / object 层数件；空层显示「空」轻量状态，§P3）
 	func _count_text() -> String:
 		var id := str(_layer["id"])
 		if str(_layer.get("type", "tile")) == "object":
-			return "%d件" % _panel._document.get_objects_on_layer(id).size()
-		return "%d格" % _panel._document.get_tile_count(id)
+			var n := _panel._document.get_objects_on_layer(id).size()
+			if n == 0:
+				return "空"
+			return "%d件" % n
+		var n := _panel._document.get_tile_count(id)
+		if n == 0:
+			return "空"
+		return "%d格" % n
+
+	## 状态说明尾巴（tooltip 追加：隐藏/锁定轻量状态，§P3）
+	func _state_note() -> String:
+		var notes: Array = []
+		if not bool(_layer.get("visible", true)):
+			notes.append("已隐藏")
+		if bool(_layer.get("locked", false)):
+			notes.append("已锁定")
+		if notes.is_empty():
+			return ""
+		return "（%s）" % "、".join(notes)
 
 	## 内容变化时只更新计数文本（全量重建会打断行2 控件交互）
 	func refresh_count() -> void:
@@ -321,6 +355,9 @@ class LayerEntry extends PanelContainer:
 		menu.add_item("下移（更低层级）", 2)
 		menu.add_separator()
 		menu.add_item("删除该层（需先清空内容）", 3)
+		# 删除项危险色图标（颜色+图标双通道，§P3 菜单危险色）
+		menu.set_item_icon(4, _danger_dot_icon())
+		menu.set_item_icon_modulate(4, AppTheme.DANGER)
 		menu.id_pressed.connect(_on_more_id)
 		more.pressed.connect(func() -> void:
 			menu.reset_size()
@@ -328,6 +365,16 @@ class LayerEntry extends PanelContainer:
 			menu.position = Vector2i(int(gp.x), int(gp.y + more.size.y))
 			menu.popup())
 		return more
+
+	## 6px 危险色圆点图标（⋯菜单删除项）
+	static func _danger_dot_icon() -> ImageTexture:
+		var img := Image.create(8, 8, false, Image.FORMAT_RGBA8)
+		var white := Color(1, 1, 1, 1)
+		for y in 8:
+			for x in 8:
+				if Vector2(x - 3.5, y - 3.5).length() <= 3.0:
+					img.set_pixel(x, y, white)
+		return ImageTexture.create_from_image(img)
 
 	## ⋯ 菜单项分发（match 抽独立方法：lambda 内嵌 match 多分支解析不稳）
 	func _on_more_id(id: int) -> void:
@@ -340,7 +387,8 @@ class LayerEntry extends PanelContainer:
 				_panel._document.move_layer(str(_layer["id"]), _panel_index_to_layer_index() - 1)
 			3:
 				if not _panel._document.remove_layer(str(_layer["id"])):
-					print("[TileMason] 删除失败：层上有内容或已是最后一层（先清空该层）")
+					# 不可用操作给出原因（§P4），不只无反应/打日志
+					_panel.notice_requested.emit("删除失败：「%s」层上有内容或已是最后一层（先清空该层）" % str(_layer.get("name", "")), "warn")
 
 	var _last_press_ms := 0
 

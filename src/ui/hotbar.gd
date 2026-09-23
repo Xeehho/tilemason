@@ -62,6 +62,7 @@ func setup(lib: AssetLibrary, bindings: Array) -> void:
 var _eraser_btn: TextureButton
 
 ## 单格：48×48 容器 + 铺满的按钮 + 右上角数字角标（§5.5 槽位显示 1..9 角标）
+## 底部 2px 金色底线位（§4.4：当前槽用金色底线，不做整块高亮；默认隐藏）
 func _make_slot(badge_text: String) -> Control:
 	var slot := Control.new()
 	slot.custom_minimum_size = Vector2(SLOT_SIZE, SLOT_SIZE)
@@ -86,6 +87,15 @@ func _make_slot(badge_text: String) -> Control:
 	bg.content_margin_bottom = 1
 	badge.add_theme_stylebox_override("normal", bg)
 	slot.add_child(badge)
+	var underline := ColorRect.new()
+	underline.color = AppTheme.ACCENT
+	underline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	underline.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	underline.offset_top = -2
+	underline.offset_bottom = 0
+	underline.visible = false
+	slot.add_child(underline)
+	slot.set_meta("underline", underline)
 	return slot
 
 ## 刷新某槽图标（按绑定；空槽显示淡色空框占位）
@@ -116,7 +126,10 @@ func set_bindings(bindings: Array) -> void:
 func bindings() -> Array:
 	return _bindings.duplicate()
 
-## 橡皮格高亮开关（当前工具是否橡皮）
+## 橡皮格激活态（当前工具是否橡皮）：金色底线（§4.4），不再整块染金
 func set_eraser_active(on: bool) -> void:
 	if _eraser_btn != null:
-		_eraser_btn.modulate = Color(1.0, 0.85, 0.4) if on else Color.WHITE
+		var underline = _eraser_btn.get_parent().get_meta("underline", null) if _eraser_btn.get_parent() != null else null
+		if underline != null:
+			(underline as ColorRect).visible = on
+		_eraser_btn.modulate = Color.WHITE if on else Color(1, 1, 1, 0.9)
